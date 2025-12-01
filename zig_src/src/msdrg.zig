@@ -144,7 +144,7 @@ pub const GrouperChain = struct {
         l_clusters.* = preprocess.MsdrgClusters{ .cluster_info = &self.cluster_info, .cluster_map = &self.cluster_map, .version = version };
 
         const l_proc_attr = try allocator.create(preprocess.ProcedureAttributeProcessor);
-        l_proc_attr.* = preprocess.ProcedureAttributeProcessor{ .procedure_attributes = &self.procedure_attributes, .pr_patterns = &self.pr_patterns };
+        l_proc_attr.* = preprocess.ProcedureAttributeProcessor{ .procedure_attributes = &self.procedure_attributes, .pr_patterns = &self.pr_patterns, .version = version };
 
         const l_sdx_attr = try allocator.create(preprocess.SdxAttributeProcessor);
         l_sdx_attr.* = preprocess.SdxAttributeProcessor{ .diagnosis_data = &self.diagnosis_data, .dx_patterns = &self.dx_patterns, .hac_descriptions = &self.hac_descriptions, .version = version };

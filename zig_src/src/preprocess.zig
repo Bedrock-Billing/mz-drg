@@ -43,7 +43,7 @@ pub const MsdrgClusters = struct {
             // 2. Process candidate clusters
             var it = candidate_clusters.keyIterator();
             while (it.next()) |c_idx_ptr| {
-                const c_idx = c_idx_ptr.*;
+                const c_idx = c_idx_ptr.* - 1;
 
                 if (c_idx >= self.cluster_info.mapped.header.num_clusters) {
                     std.log.err("MsdrgClusters: Cluster index {d} out of bounds (max {d})", .{ c_idx, self.cluster_info.mapped.header.num_clusters });
@@ -484,6 +484,7 @@ pub const SdxAttributeProcessor = struct {
 pub const ProcedureAttributeProcessor = struct {
     procedure_attributes: *const code_map.CodeMapData,
     pr_patterns: *const pattern.PatternData,
+    version: i32,
 
     pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
@@ -508,7 +509,7 @@ pub const ProcedureAttributeProcessor = struct {
     fn processCode(self: *const ProcedureAttributeProcessor, proc: *models.ProcedureCode, allocator: std.mem.Allocator) !void {
         const code_slice = proc.value.toSlice();
         // Lookup in code map (version 400 assumed)
-        if (self.procedure_attributes.getEntry(code_slice, 400)) |entry| {
+        if (self.procedure_attributes.getEntry(code_slice, self.version)) |entry| {
             const pattern_id = @as(u32, @intCast(entry.value));
             std.log.debug("ProcedureAttributeProcessor: Code {s} -> Pattern ID {d}", .{ code_slice, pattern_id });
             if (self.pr_patterns.getPattern(pattern_id)) |pat| {

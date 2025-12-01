@@ -4,8 +4,8 @@ import json
 import os
 
 # Configuration
-NUM_CLAIMS = 50_000
-TARGET_VERSION = 400
+NUM_CLAIMS = 5_000
+TARGET_VERSION = 410
 OUTPUT_FILE = "test_claims.json"
 DX_FILE = "data/csv/diagnosisAll.csv"
 PROC_FILE = "data/csv/procedureAttributes.csv"
