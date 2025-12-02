@@ -10,6 +10,12 @@ pub const Cumulatives = struct {
     non_eluting_stent_count: u16,
     eluting_stent_count: u16,
     vessel_count: u16,
+    single_fusion_count: u16,
+    anterior_fusion_count: u16,
+    posterior_fusion_count: u16,
+    single_fusion_counter: u16,
+    single_anterior_fusion_count: u16,
+    single_posterior1_fusion_count: u16,
 };
 
 pub const MsdrgMaskBuilder = struct {
@@ -21,6 +27,16 @@ pub const MsdrgMaskBuilder = struct {
         .{ "rightknee", 3 },
         .{ "leftankle", 4 },
         .{ "rightankle", 5 },
+    });
+    const MULTFUSIONS = std.StaticStringMap(u2).initComptime(.{
+        .{ "sglantfuse", 0 },
+        .{ "sglpostfuse1", 1 },
+    });
+    //Not sure why sglpostfuse is not suffixed with a number like sglpostfuse1 but the Java
+    // code uses this so keeping it the same for now.
+    const SNGLFUSIONCTR = std.StaticStringMap(u2).initComptime(.{
+        .{ "sglantfuse", 0 },
+        .{ "sglpostfuse", 1 },
     });
 
     pub fn buildMask(data: *models.ProcessingData, allocator: std.mem.Allocator) !std.StringHashMap(u32) {
@@ -35,6 +51,12 @@ pub const MsdrgMaskBuilder = struct {
             .non_eluting_stent_count = 0,
             .eluting_stent_count = 0,
             .vessel_count = 0,
+            .single_fusion_count = 0,
+            .anterior_fusion_count = 0,
+            .posterior_fusion_count = 0,
+            .single_fusion_counter = 0,
+            .single_anterior_fusion_count = 0,
+            .single_posterior1_fusion_count = 0,
         };
         // Helper to add attribute
         const addAttr = struct {
@@ -130,6 +152,25 @@ pub const MsdrgMaskBuilder = struct {
                 }
                 if (std.mem.eql(u8, attr.list_name, models.SourceLogicLists.NORSTENT)) {
                     has_norstent = true;
+                }
+                if (MULTFUSIONS.get(attr.list_name)) |bit_idx| {
+                    cumulatives.single_fusion_count += 1;
+                    if (bit_idx == 0) {
+                        cumulatives.single_anterior_fusion_count += 1;
+                    } else if (bit_idx == 1) {
+                        cumulatives.single_posterior1_fusion_count += 1;
+                    }
+                }
+                if (std.mem.eql(u8, attr.list_name, "sglantsectXfuse")) {
+                    cumulatives.anterior_fusion_count += 1;
+                }
+
+                if (std.mem.eql(u8, attr.list_name, "sglpostfuse")) {
+                    cumulatives.posterior_fusion_count += 1;
+                }
+
+                if (SNGLFUSIONCTR.has(attr.list_name)) {
+                    cumulatives.single_fusion_counter += 1;
                 }
             }
 
@@ -281,6 +322,34 @@ pub const MsdrgMaskBuilder = struct {
 
         if (cumulatives.eluting_stent_count + cumulatives.non_eluting_stent_count >= 4) {
             try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.FOUR_STENTS }, allocator, &cumulatives);
+        }
+
+        if (cumulatives.single_fusion_count > 1) {
+            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.MULTFUSE }, allocator, &cumulatives);
+        }
+
+        if (cumulatives.single_fusion_count > 1) {
+            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.MULTFUSE }, allocator, &cumulatives);
+        }
+
+        if (cumulatives.anterior_fusion_count > 1) {
+            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.SGLANTSECTXCTR }, allocator, &cumulatives);
+        }
+
+        if (cumulatives.posterior_fusion_count > 1) {
+            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.SGLPOSTFUSECTR }, allocator, &cumulatives);
+        }
+
+        if (cumulatives.single_fusion_counter >= 3) {
+            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.SINGLEFUSIONCTR }, allocator, &cumulatives);
+        }
+
+        if (cumulatives.single_anterior_fusion_count >= 2) {
+            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.SGLANTFUSECTR }, allocator, &cumulatives);
+        }
+
+        if (cumulatives.single_posterior1_fusion_count >= 2) {
+            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.SGLPOST1FUSECTR }, allocator, &cumulatives);
         }
 
         std.log.debug("Cumulative attributes: {any}", .{cumulatives});

@@ -180,6 +180,12 @@ pub const SourceLogicLists = struct {
     pub const FOUR_DRUG_ELUTING_STENTS = "FOUR_DRUG_ELUTING_STENTS";
     pub const FOUR_VESSELS = "FOUR_VESSELS";
     pub const FOUR_STENTS = "FOUR_STENTS";
+    pub const MULTFUSE = "MULTFUSE";
+    pub const SGLANTSECTXCTR = "SGLANTSECTXCTR";
+    pub const SGLPOSTFUSECTR = "SGLPOSTFUSECTR";
+    pub const SINGLEFUSIONCTR = "SINGLEFUSIONCTR";
+    pub const SGLANTFUSECTR = "SGLANTCTR";
+    pub const SGLPOST1FUSECTR = "SGLPOST1CTR";
 };
 
 pub const Attribute = struct {
