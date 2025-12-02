@@ -179,6 +179,7 @@ pub const SourceLogicLists = struct {
     pub const FOUR_NON_DRUG_ELUTING_STENTS = "FOUR_NON_DRUG_ELUTING_STENTS";
     pub const FOUR_DRUG_ELUTING_STENTS = "FOUR_DRUG_ELUTING_STENTS";
     pub const FOUR_VESSELS = "FOUR_VESSELS";
+    pub const FOUR_STENTS = "FOUR_STENTS";
 };
 
 pub const Attribute = struct {

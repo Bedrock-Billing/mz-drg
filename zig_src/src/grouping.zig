@@ -279,6 +279,10 @@ pub const MsdrgMaskBuilder = struct {
             try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.FOUR_VESSELS }, allocator, &cumulatives);
         }
 
+        if (cumulatives.eluting_stent_count + cumulatives.non_eluting_stent_count >= 4) {
+            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.FOUR_STENTS }, allocator, &cumulatives);
+        }
+
         std.log.debug("Cumulative attributes: {any}", .{cumulatives});
 
         return mask;
