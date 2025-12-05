@@ -3,7 +3,7 @@ const common = @import("common.zig");
 const formula = @import("formula.zig");
 
 pub const GrouperError = error{
-    DX_CANNONT_BE_PDX,
+    DX_CANNOT_BE_PDX,
 };
 
 pub const Sex = enum {
@@ -134,7 +134,7 @@ pub const GrouperReturnCode = enum {
     INVALID_AGE,
     INVALID_SEX,
     INVALID_DISCHARGE_STATUS,
-    DX_CANNONT_BE_PDX,
+    DX_CANNOT_BE_PDX,
     UNGROUPABLE,
     // Add others as needed
 };
@@ -329,7 +329,9 @@ pub const ProcedureCode = struct {
 pub const GrouperResult = struct {
     base_drg: ?i32,
     drg: ?i32,
+    drg_description: ?[]const u8,
     mdc: ?i32,
+    mdc_description: ?[]const u8,
     reroute_mdc_id: ?i32,
     return_code: GrouperReturnCode,
 };
@@ -361,8 +363,24 @@ pub const ProcessingData = struct {
             .age = 0,
             .sex = .UNKNOWN,
             .discharge_status = .NONE,
-            .initial_result = .{ .base_drg = null, .drg = null, .mdc = null, .reroute_mdc_id = null, .return_code = .OK },
-            .final_result = .{ .base_drg = null, .drg = null, .mdc = null, .reroute_mdc_id = null, .return_code = .OK },
+            .initial_result = .{
+                .base_drg = null,
+                .drg = null,
+                .mdc = null,
+                .reroute_mdc_id = null,
+                .return_code = .OK,
+                .drg_description = "",
+                .mdc_description = "",
+            },
+            .final_result = .{
+                .base_drg = null,
+                .drg = null,
+                .mdc = null,
+                .reroute_mdc_id = null,
+                .return_code = .OK,
+                .drg_description = "",
+                .mdc_description = "",
+            },
             .initial_severity = .NONE,
             .final_severity = .NONE,
             .allocator = allocator,

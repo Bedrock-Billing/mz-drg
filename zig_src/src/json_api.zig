@@ -28,6 +28,10 @@ pub const OutputResult = struct {
     final_drg: ?i32,
     initial_mdc: ?i32,
     final_mdc: ?i32,
+    initial_drg_description: ?[]const u8 = null,
+    final_drg_description: ?[]const u8 = null,
+    initial_mdc_description: ?[]const u8 = null,
+    final_mdc_description: ?[]const u8 = null,
     return_code: []const u8,
     // Detailed output can be added here
     pdx_output: ?DiagnosisOutput = null,
@@ -95,15 +99,16 @@ fn mapProcedureOutput(allocator: std.mem.Allocator, proc: models.ProcedureCode) 
     };
 }
 
-pub fn processJson(allocator: std.mem.Allocator, grouper_chain: *msdrg.GrouperChain, json_str: []const u8) ![]u8 {
+pub fn processJson(allocator: std.mem.Allocator, grouper_chain: *const msdrg.GrouperChain, json_str: []const u8) ![]u8 {
     // 1. Parse JSON
     const parsed = try std.json.parseFromSlice(InputClaim, allocator, json_str, .{ .ignore_unknown_fields = true });
     defer parsed.deinit();
     const input = parsed.value;
 
-    // 2. Create Link for requested version
-    var link = try grouper_chain.create(input.version);
-    defer link.deinit(allocator);
+    // 2. Get pre-built Link for requested version (thread-safe, no allocation)
+    // The Link struct is returned by value - it's small and only contains pointers
+    // to the pre-allocated chain objects. Do NOT deinit - we don't own the underlying data.
+    const link = try grouper_chain.getLink(input.version);
 
     // 3. Setup Processing Data
     var data = models.ProcessingData.init(allocator);
@@ -163,6 +168,10 @@ pub fn processJson(allocator: std.mem.Allocator, grouper_chain: *msdrg.GrouperCh
         .final_drg = final_ctx.data.final_result.drg,
         .initial_mdc = final_ctx.data.initial_result.mdc,
         .final_mdc = final_ctx.data.final_result.mdc,
+        .initial_drg_description = final_ctx.data.initial_result.drg_description,
+        .final_drg_description = final_ctx.data.final_result.drg_description,
+        .initial_mdc_description = final_ctx.data.initial_result.mdc_description,
+        .final_mdc_description = final_ctx.data.final_result.mdc_description,
         .return_code = @tagName(final_ctx.data.final_result.return_code),
         .pdx_output = pdx_out,
         .sdx_output = sdx_out.items,

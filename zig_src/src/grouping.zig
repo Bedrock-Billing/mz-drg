@@ -467,10 +467,8 @@ pub const GroupingExecutor = struct {
 
                     if (drg_formula.reroute_mdc_id != 0) {
                         std.log.debug("GroupingExecutor: DRG {d} triggers reroute to MDC {d}", .{ drg_formula.drg, drg_formula.reroute_mdc_id });
-                        const reroute = try group(formula_data, data, allocator, drg_formula.reroute_mdc_id, version);
-                        if (reroute) |res| {
-                            return .{ .formula = res.formula, .severity = res.severity, .new_mdc = drg_formula.reroute_mdc_id };
-                        }
+                        // Rerouting is now handled by MsdrgInitialRerouting/MsdrgFinalRerouting
+                        // Return the matched formula with reroute info, let the chain handle the reroute
                     } else {
                         std.log.debug("GroupingExecutor: Match found! DRG: {d}", .{drg_formula.drg});
                     }
@@ -506,11 +504,11 @@ pub const MsdrgInitialPreGrouping = struct {
                 if (std.mem.eql(u8, attr.list_name, "ecode")) {
                     data.initial_result.drg = 999;
                     data.initial_result.mdc = 0;
-                    data.initial_result.return_code = .DX_CANNONT_BE_PDX;
+                    data.initial_result.return_code = .DX_CANNOT_BE_PDX;
 
                     data.final_result.drg = 999;
                     data.final_result.mdc = 0;
-                    data.final_result.return_code = .DX_CANNONT_BE_PDX;
+                    data.final_result.return_code = .DX_CANNOT_BE_PDX;
 
                     return chain.LinkResult{
                         .context = context,
@@ -560,17 +558,25 @@ pub const MsdrgInitialRerouting = struct {
         const data = context.data;
         const allocator = context.allocator;
 
-        // Check if reroute is needed
-        if (context.initial_grouping_context.pre_match) |pre_match| {
-            if (pre_match.reroute_mdc_id != 0) {
-                const reroute_mdc = pre_match.reroute_mdc_id;
+        // Check if reroute is needed - check both pre_match and pdx_match
+        // Track which match we're using to determine MDC handling
+        const is_pre_match = context.initial_grouping_context.pdx_match == null and context.initial_grouping_context.pre_match != null;
+        const match_to_check: ?formula.DrgFormula = context.initial_grouping_context.pdx_match orelse context.initial_grouping_context.pre_match;
+
+        if (match_to_check) |matched_formula| {
+            if (matched_formula.reroute_mdc_id != 0) {
+                const reroute_mdc = matched_formula.reroute_mdc_id;
 
                 const result = try GroupingExecutor.group(self.formula_data, data, allocator, reroute_mdc, self.version);
 
                 if (result) |res| {
                     data.initial_result.base_drg = res.formula.base_drg;
                     data.initial_result.drg = res.formula.drg;
-                    data.initial_result.mdc = reroute_mdc;
+                    // If rerouting from pre_match (MDC 0), use the reroute MDC
+                    // If rerouting from pdx_match, keep the original PDX MDC
+                    if (is_pre_match) {
+                        data.initial_result.mdc = reroute_mdc;
+                    }
                     data.initial_result.reroute_mdc_id = res.formula.reroute_mdc_id;
                     data.initial_severity = res.severity;
 
@@ -584,7 +590,8 @@ pub const MsdrgInitialRerouting = struct {
                         if (result_2) |res_2| {
                             data.initial_result.base_drg = res_2.formula.base_drg;
                             data.initial_result.drg = res_2.formula.drg;
-                            data.initial_result.mdc = reroute_mdc_2;
+                            // For nested reroutes, DON'T update MDC - keep the first reroute MDC
+                            // The MDC was already set to reroute_mdc above
                             data.initial_result.reroute_mdc_id = res_2.formula.reroute_mdc_id;
                             data.initial_severity = res_2.severity;
 
@@ -657,16 +664,33 @@ pub const MsdrgInitialPdxGrouping = struct {
 
 pub const MsdrgInitialDrgResults = struct {
     description_data: *const description.DescriptionData,
+    mdc_description_data: *const description.DescriptionData,
+    version: i32,
 
     pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
-        _ = self;
         const data = context.data;
 
         if (data.initial_result.drg == null) {
             data.initial_result.drg = 999;
             data.initial_result.mdc = 0;
             data.initial_result.return_code = .UNGROUPABLE;
+        } else {
+            data.initial_result.return_code = .OK;
+        }
+
+        // Fetch DRG description
+        if (data.initial_result.drg) |drg| {
+            if (self.description_data.getEntry(@intCast(drg), self.version)) |entry| {
+                data.initial_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr);
+            }
+        }
+
+        // Fetch MDC description
+        if (data.initial_result.mdc) |mdc| {
+            if (self.mdc_description_data.getEntry(@intCast(mdc), self.version)) |entry| {
+                data.initial_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr);
+            }
         }
 
         return chain.LinkResult{
@@ -726,18 +750,25 @@ pub const MsdrgFinalRerouting = struct {
         const data = context.data;
         const allocator = context.allocator;
 
-        // Check if reroute is needed
-        // Check pre_match from final context
-        if (context.final_grouping_context.pre_match) |pre_match| {
-            if (pre_match.reroute_mdc_id != 0) {
-                const reroute_mdc = pre_match.reroute_mdc_id;
+        // Check if reroute is needed - check both pdx_match and pre_match
+        // Track which match we're using to determine MDC handling
+        const is_pre_match = context.final_grouping_context.pdx_match == null and context.final_grouping_context.pre_match != null;
+        const match_to_check: ?formula.DrgFormula = context.final_grouping_context.pdx_match orelse context.final_grouping_context.pre_match;
+
+        if (match_to_check) |matched_formula| {
+            if (matched_formula.reroute_mdc_id != 0) {
+                const reroute_mdc = matched_formula.reroute_mdc_id;
 
                 const result = try GroupingExecutor.group(self.formula_data, data, allocator, reroute_mdc, self.version);
 
                 if (result) |res| {
                     data.final_result.base_drg = res.formula.base_drg;
                     data.final_result.drg = res.formula.drg;
-                    data.final_result.mdc = reroute_mdc;
+                    // If rerouting from pre_match (MDC 0), use the reroute MDC
+                    // If rerouting from pdx_match, keep the original PDX MDC
+                    if (is_pre_match) {
+                        data.final_result.mdc = reroute_mdc;
+                    }
                     data.final_result.reroute_mdc_id = res.formula.reroute_mdc_id;
                     data.final_severity = res.severity;
 
@@ -751,7 +782,8 @@ pub const MsdrgFinalRerouting = struct {
                         if (result_2) |res_2| {
                             data.final_result.base_drg = res_2.formula.base_drg;
                             data.final_result.drg = res_2.formula.drg;
-                            data.final_result.mdc = reroute_mdc_2;
+                            // For nested reroutes, DON'T update MDC - keep the first reroute MDC
+                            // The MDC was already set to reroute_mdc above
                             data.final_result.reroute_mdc_id = res_2.formula.reroute_mdc_id;
                             data.final_severity = res_2.severity;
 
@@ -824,15 +856,32 @@ pub const MsdrgFinalPdxGrouping = struct {
 
 pub const MsdrgFinalDrgResults = struct {
     description_data: *const description.DescriptionData,
+    mdc_description_data: *const description.DescriptionData,
+    version: i32,
 
     pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
-        _ = self;
         const data = context.data;
         if (data.final_result.drg == null) {
             data.final_result.drg = 999;
             data.final_result.mdc = 0;
             data.final_result.return_code = .UNGROUPABLE;
+        } else {
+            data.final_result.return_code = .OK;
+        }
+
+        // Fetch DRG description
+        if (data.final_result.drg) |drg| {
+            if (self.description_data.getEntry(@intCast(drg), self.version)) |entry| {
+                data.final_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr);
+            }
+        }
+
+        // Fetch MDC description
+        if (data.final_result.mdc) |mdc| {
+            if (self.mdc_description_data.getEntry(@intCast(mdc), self.version)) |entry| {
+                data.final_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr);
+            }
         }
 
         return chain.LinkResult{

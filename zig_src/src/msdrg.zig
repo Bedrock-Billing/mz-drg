@@ -26,12 +26,22 @@ pub const GrouperChain = struct {
     exclusion_ids: code_map.CodeMapData,
     exclusion_groups: exclusion.ExclusionData,
     description_data: description.DescriptionData,
+    mdc_description_data: description.DescriptionData,
     gender_mdc: gender.GenderMdcData,
     hac_descriptions: hac.HacDescriptionData,
     hac_formula_data: hac.HacFormulaData,
     formula_data: formula.FormulaData,
 
     allocator: std.mem.Allocator,
+
+    // Pre-built Links for supported versions (immutable after init, thread-safe)
+    link_v400: ?chain.Link = null,
+    link_v401: ?chain.Link = null,
+    link_v410: ?chain.Link = null,
+    link_v411: ?chain.Link = null,
+    link_v420: ?chain.Link = null,
+    link_v421: ?chain.Link = null,
+    link_v430: ?chain.Link = null,
 
     pub fn init(allocator: std.mem.Allocator, data_dir: []const u8) !GrouperChain {
         // Helper to join paths
@@ -77,6 +87,10 @@ pub const GrouperChain = struct {
         defer allocator.free(desc_path);
         const description_data = try description.DescriptionData.init(desc_path, 0x44524744); // Magic for DRGD
 
+        const mdc_desc_path = try join(allocator, &[_][]const u8{ data_dir, "mdc_descriptions.bin" });
+        defer allocator.free(mdc_desc_path);
+        const mdc_description_data = try description.DescriptionData.init(mdc_desc_path, 0x4D444344); // Magic for MDCD
+
         const gender_path = try join(allocator, &[_][]const u8{ data_dir, "gender_mdcs.bin" });
         defer allocator.free(gender_path);
         const gender_mdc = try gender.GenderMdcData.init(gender_path);
@@ -93,7 +107,7 @@ pub const GrouperChain = struct {
         defer allocator.free(formula_path);
         const formula_data = try formula.FormulaData.init(formula_path);
 
-        return GrouperChain{
+        const self = GrouperChain{
             .cluster_info = cluster_info,
             .cluster_map = cluster_map,
             .procedure_attributes = procedure_attributes,
@@ -103,15 +117,43 @@ pub const GrouperChain = struct {
             .exclusion_ids = exclusion_ids,
             .exclusion_groups = exclusion_groups,
             .description_data = description_data,
+            .mdc_description_data = mdc_description_data,
             .gender_mdc = gender_mdc,
             .hac_descriptions = hac_descriptions,
             .hac_formula_data = hac_formula_data,
             .formula_data = formula_data,
             .allocator = allocator,
         };
+
+        return self;
+    }
+
+    /// Initialize pre-built Links for all supported versions.
+    /// MUST be called after the GrouperChain is in its final memory location (e.g., after heap allocation).
+    /// This is necessary because the Links contain pointers back to GrouperChain's data fields.
+    pub fn initLinks(self: *GrouperChain) !void {
+        // Pre-build Links for all supported versions
+        // These are immutable after init, enabling lock-free thread-safe access
+        self.link_v400 = try self.createInternal(400);
+        self.link_v401 = try self.createInternal(401);
+        self.link_v410 = try self.createInternal(410);
+        self.link_v411 = try self.createInternal(411);
+        self.link_v420 = try self.createInternal(420);
+        self.link_v421 = try self.createInternal(421);
+        self.link_v430 = try self.createInternal(430);
     }
 
     pub fn deinit(self: *GrouperChain) void {
+        // Free pre-built links
+        if (self.link_v400) |*l| l.deinit(self.allocator);
+        if (self.link_v401) |*l| l.deinit(self.allocator);
+        if (self.link_v410) |*l| l.deinit(self.allocator);
+        if (self.link_v411) |*l| l.deinit(self.allocator);
+        if (self.link_v420) |*l| l.deinit(self.allocator);
+        if (self.link_v421) |*l| l.deinit(self.allocator);
+        if (self.link_v430) |*l| l.deinit(self.allocator);
+
+        // Free data sources
         self.cluster_info.deinit();
         self.cluster_map.deinit();
         self.procedure_attributes.deinit();
@@ -121,10 +163,28 @@ pub const GrouperChain = struct {
         self.exclusion_ids.deinit();
         self.exclusion_groups.deinit();
         self.description_data.deinit();
+        self.mdc_description_data.deinit();
         self.gender_mdc.deinit();
         self.hac_descriptions.deinit();
         self.hac_formula_data.deinit();
         self.formula_data.deinit();
+    }
+
+    /// Returns the pre-built Link for the given version.
+    /// This is lock-free and thread-safe since the Link struct is small and
+    /// only contains pointers to immutable data.
+    /// Returns error.VersionNotSupported if version is not one of: 400, 401, 410, 411, 420, 421, 430.
+    pub fn getLink(self: *const GrouperChain, version: i32) !chain.Link {
+        return switch (version) {
+            400 => self.link_v400 orelse error.VersionNotSupported,
+            401 => self.link_v401 orelse error.VersionNotSupported,
+            410 => self.link_v410 orelse error.VersionNotSupported,
+            411 => self.link_v411 orelse error.VersionNotSupported,
+            420 => self.link_v420 orelse error.VersionNotSupported,
+            421 => self.link_v421 orelse error.VersionNotSupported,
+            430 => self.link_v430 orelse error.VersionNotSupported,
+            else => error.VersionNotSupported,
+        };
     }
 
     fn makeDeinit(comptime T: type) fn (*anyopaque, std.mem.Allocator) void {
@@ -136,7 +196,14 @@ pub const GrouperChain = struct {
         }.deinit;
     }
 
-    pub fn create(self: *GrouperChain, version: i32) !chain.Link {
+    /// Creates a new Link for the given version. This allocates memory.
+    /// Prefer using getLink() for thread-safe, lock-free access to pre-built links.
+    /// This method is kept for backward compatibility.
+    pub fn create(self: *const GrouperChain, version: i32) !chain.Link {
+        return self.createInternal(version);
+    }
+
+    fn createInternal(self: *const GrouperChain, version: i32) !chain.Link {
         const allocator = self.allocator;
 
         // 1. Preprocessing Link
@@ -182,7 +249,7 @@ pub const GrouperChain = struct {
         l_init_reroute2.* = grouping.MsdrgInitialRerouting{ .formula_data = &self.formula_data, .description_data = &self.description_data, .version = version };
 
         const l_init_results = try allocator.create(grouping.MsdrgInitialDrgResults);
-        l_init_results.* = grouping.MsdrgInitialDrgResults{ .description_data = &self.description_data };
+        l_init_results.* = grouping.MsdrgInitialDrgResults{ .description_data = &self.description_data, .mdc_description_data = &self.mdc_description_data, .version = version };
 
         const initial_grouping_links = [_]chain.Link{
             chain.Link{ .ptr = l_init_pre, .executeFn = grouping.MsdrgInitialPreGrouping.execute, .deinitFn = makeDeinit(grouping.MsdrgInitialPreGrouping) },
@@ -233,7 +300,7 @@ pub const GrouperChain = struct {
         l_final_reroute2.* = grouping.MsdrgFinalRerouting{ .formula_data = &self.formula_data, .description_data = &self.description_data, .version = version };
 
         const l_final_results = try allocator.create(grouping.MsdrgFinalDrgResults);
-        l_final_results.* = grouping.MsdrgFinalDrgResults{ .description_data = &self.description_data };
+        l_final_results.* = grouping.MsdrgFinalDrgResults{ .description_data = &self.description_data, .mdc_description_data = &self.mdc_description_data, .version = version };
 
         const final_grouping_links = [_]chain.Link{
             chain.Link{ .ptr = l_final_pre, .executeFn = grouping.MsdrgFinalPreGrouping.execute, .deinitFn = makeDeinit(grouping.MsdrgFinalPreGrouping) },

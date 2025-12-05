@@ -11,11 +11,12 @@ pub const Link = struct {
     executeFn: *const fn (ptr: *anyopaque, context: models.ProcessingContext) anyerror!LinkResult,
     deinitFn: ?*const fn (ptr: *anyopaque, allocator: std.mem.Allocator) void = null,
 
-    pub fn execute(self: Link, context: models.ProcessingContext) !LinkResult {
+    pub fn execute(self: *const Link, context: models.ProcessingContext) !LinkResult {
         const result = try self.executeFn(self.ptr, context);
         if (!result.continue_processing) {
             std.log.debug("Link: Stopping chain execution.", .{});
         }
+
         return result;
     }
 

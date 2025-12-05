@@ -4,6 +4,21 @@ const models = @import("models.zig");
 const chain = @import("chain.zig");
 const json_api = @import("json_api.zig");
 
+// --- Thread Safety ---
+// This C API is designed for thread-safe concurrent access:
+//
+// After msdrg_context_init() completes, the MsdrgContext is immutable and can be
+// safely shared across multiple threads. The following functions are thread-safe
+// and can be called concurrently without external locking:
+//   - msdrg_group_json()
+//
+// The msdrg_version_create/msdrg_group API is also thread-safe, but each thread
+// should create its own MsdrgVersion and MsdrgInput instances.
+//
+// NOT thread-safe (call only from main thread):
+//   - msdrg_context_init()
+//   - msdrg_context_free()
+
 // --- Allocator ---
 // Use C allocator (malloc/free) for shared library to avoid GPA issues and integrate better with system.
 const c_allocator = std.heap.c_allocator;
@@ -25,6 +40,13 @@ export fn msdrg_context_init(data_dir: [*c]const u8) ?*MsdrgContext {
 
     const ctx = allocator.create(msdrg.GrouperChain) catch return null;
     ctx.* = msdrg.GrouperChain.init(allocator, dir_slice) catch {
+        allocator.destroy(ctx);
+        return null;
+    };
+
+    // Initialize pre-built links now that the struct is in its final heap location
+    ctx.initLinks() catch {
+        ctx.deinit();
         allocator.destroy(ctx);
         return null;
     };
