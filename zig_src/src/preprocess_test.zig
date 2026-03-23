@@ -21,10 +21,10 @@ const description = @import("description.zig");
 fn createTempFile(content: []const u8) ![]const u8 {
     var buf: [64]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "test_{d}.bin", .{std.time.nanoTimestamp()});
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
-    defer file.close();
-    try file.writeAll(content);
-    return try std.fs.cwd().dupe(filename);
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
+    defer std.Io.File.close(file, std.testing.io);
+    try std.Io.File.writeStreamingAll(file, std.testing.io, content);
+    return try std.testing.allocator.dupe(u8, filename);
 }
 
 test "MsdrgExclusions logic" {
@@ -34,56 +34,56 @@ test "MsdrgExclusions logic" {
     // Exclusion IDs: Map PDX "A001" -> Group ID 1
     const excl_ids_filename = "test_excl_ids.bin";
     {
-        const file = try std.fs.cwd().createFile(excl_ids_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, excl_ids_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         // Header
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x45584944, .little);
-        try file.writeAll(&b); // Magic
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Magic
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Num entries
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Num entries
         std.mem.writeInt(u32, &b, 12, .little);
-        try file.writeAll(&b); // Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Offset
 
         // Entry: A001 -> 1
         var code_buf: [8]u8 = [_]u8{0} ** 8;
         @memcpy(code_buf[0..4], "A001");
-        try file.writeAll(&code_buf);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
         std.mem.writeInt(i32, &b, 400, .little);
-        try file.writeAll(&b); // Start
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Start
         std.mem.writeInt(i32, &b, 410, .little);
-        try file.writeAll(&b); // End
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // End
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Value (Group ID)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Value (Group ID)
     }
-    defer std.fs.cwd().deleteFile(excl_ids_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, excl_ids_filename) catch {};
 
     // Exclusion Groups: Group 1 -> ["B002"]
     const excl_groups_filename = "test_excl_groups.bin";
     {
-        const file = try std.fs.cwd().createFile(excl_groups_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, excl_groups_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         // Header
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x4D534452, .little);
-        try file.writeAll(&b); // Magic (MSDR)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Magic (MSDR)
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Num groups
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Num groups
 
         // Index Entry: Key 1, Count 1, Offset 20 (8 header + 12 index)
         std.mem.writeInt(i32, &b, 1, .little);
-        try file.writeAll(&b); // Key
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Key
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Count
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Count
         std.mem.writeInt(u32, &b, 20, .little);
-        try file.writeAll(&b); // Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Offset
 
         // List Data: "B002"
         var code_buf: [8]u8 = [_]u8{0} ** 8;
         @memcpy(code_buf[0..4], "B002");
-        try file.writeAll(&code_buf);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
     }
-    defer std.fs.cwd().deleteFile(excl_groups_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, excl_groups_filename) catch {};
 
     var excl_ids = try code_map.CodeMapData.init(excl_ids_filename, 0x45584944);
     defer excl_ids.deinit();
@@ -126,145 +126,145 @@ test "PdxAttributeProcessor logic" {
     // Diagnosis Data: "A001" -> Scheme 0
     const dx_filename = "test_dx.bin";
     {
-        const file = try std.fs.cwd().createFile(dx_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, dx_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         // Header: Magic(4), NumSchemes(4), NumDiagnoses(4), SchemesOff(4), DiagnosesOff(4)
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x44494147, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Num Schemes
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Num Schemes
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Num Diagnoses
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Num Diagnoses
         std.mem.writeInt(u32, &b, 20, .little);
-        try file.writeAll(&b); // Schemes Offset (after header)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Schemes Offset (after header)
         std.mem.writeInt(u32, &b, 40, .little);
-        try file.writeAll(&b); // Diagnoses Offset (after 1 scheme)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Diagnoses Offset (after 1 scheme)
 
         // Scheme 0 (20 bytes): MDC 5, Sev "MCC ", Patterns 0, 0, 0
         std.mem.writeInt(i32, &b, 5, .little);
-        try file.writeAll(&b); // MDC
-        try file.writeAll("MCC "); // Severity (4 bytes)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // MDC
+        try std.Io.File.writeStreamingAll(file, std.testing.io, "MCC "); // Severity (4 bytes)
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // Operands Pattern
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Operands Pattern
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // HAC Pattern
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // HAC Pattern
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // Dx Cat Pattern
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Dx Cat Pattern
 
         // Diagnosis 0 (20 bytes): "A001", v400-410, Scheme 0
         var code_buf: [8]u8 = [_]u8{0} ** 8;
         @memcpy(code_buf[0..4], "A001");
-        try file.writeAll(&code_buf);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
         std.mem.writeInt(i32, &b, 400, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(i32, &b, 410, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // Scheme ID
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Scheme ID
     }
-    defer std.fs.cwd().deleteFile(dx_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, dx_filename) catch {};
 
     // Pattern Data: Pattern 0 -> ["attr1"]
     const pat_filename = "test_pat.bin";
     {
-        const file = try std.fs.cwd().createFile(pat_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, pat_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         // Header: Magic(4), NumEntries(4), EntriesOff(4), ListDataOff(4), StringsOff(4)
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x44585054, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 20, .little);
-        try file.writeAll(&b); // Entries Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Entries Offset
         std.mem.writeInt(u32, &b, 32, .little);
-        try file.writeAll(&b); // List Data Offset (20 + 12)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // List Data Offset (20 + 12)
         std.mem.writeInt(u32, &b, 40, .little);
-        try file.writeAll(&b); // Strings Offset (32 + 8)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Strings Offset (32 + 8)
 
         // Entry: ID 0, Count 1, Offset 32
         std.mem.writeInt(u32, &b, 0, .little);
-        try file.writeAll(&b); // ID
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // ID
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Count
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Count
         std.mem.writeInt(u32, &b, 32, .little);
-        try file.writeAll(&b); // Offset (Points to List Data)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Offset (Points to List Data)
 
         // List Data: StringRef { offset: 40, len: 5 }
         std.mem.writeInt(u32, &b, 40, .little);
-        try file.writeAll(&b); // Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Offset
         std.mem.writeInt(u32, &b, 5, .little);
-        try file.writeAll(&b); // Len
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Len
 
         // Strings: "attr1"
-        try file.writeAll("attr1");
-        try file.writeAll(&[_]u8{0});
+        try std.Io.File.writeStreamingAll(file, std.testing.io, "attr1");
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0});
     }
-    defer std.fs.cwd().deleteFile(pat_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, pat_filename) catch {};
 
     // Gender Data: "A001" -> Male MDC 5, Female MDC 6
     const gender_filename = "test_gender.bin";
     {
-        const file = try std.fs.cwd().createFile(gender_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, gender_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         // Header
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x47454E44, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 12, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
 
         // Entry
         var code_buf: [8]u8 = [_]u8{0} ** 8;
         @memcpy(code_buf[0..4], "A001");
-        try file.writeAll(&code_buf);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
         std.mem.writeInt(i32, &b, 400, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(i32, &b, 410, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(i32, &b, 5, .little);
-        try file.writeAll(&b); // Male
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Male
         std.mem.writeInt(i32, &b, 6, .little);
-        try file.writeAll(&b); // Female
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Female
     }
-    defer std.fs.cwd().deleteFile(gender_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, gender_filename) catch {};
 
     // HAC Desc Data (Dummy)
     const hac_filename = "test_hac_desc.bin";
     {
-        const file = try std.fs.cwd().createFile(hac_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, hac_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x48414344, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 0, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
     }
-    defer std.fs.cwd().deleteFile(hac_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, hac_filename) catch {};
 
     // Description Data (Dummy)
     const desc_filename = "test_desc.bin";
     {
-        const file = try std.fs.cwd().createFile(desc_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, desc_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x44455343, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 0, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
     }
-    defer std.fs.cwd().deleteFile(desc_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, desc_filename) catch {};
 
     var dx_data = try diagnosis.DiagnosisData.init(dx_filename);
     defer dx_data.deinit();
@@ -314,119 +314,119 @@ test "SdxAttributeProcessor logic" {
     // Diagnosis Data: "B002" -> Scheme 0
     const dx_filename = "test_sdx_dx.bin";
     {
-        const file = try std.fs.cwd().createFile(dx_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, dx_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         // Header
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x44494147, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Num Schemes
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Num Schemes
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Num Diagnoses
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Num Diagnoses
         std.mem.writeInt(u32, &b, 20, .little);
-        try file.writeAll(&b); // Schemes Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Schemes Offset
         std.mem.writeInt(u32, &b, 40, .little);
-        try file.writeAll(&b); // Diagnoses Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Diagnoses Offset
 
         // Scheme 0: MDC 0, Sev "CC  ", Patterns 0, 0, 0
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // MDC
-        try file.writeAll("CC  "); // Severity
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // MDC
+        try std.Io.File.writeStreamingAll(file, std.testing.io, "CC  "); // Severity
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // Operands Pattern
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Operands Pattern
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // HAC Pattern (Using pattern 0)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // HAC Pattern (Using pattern 0)
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // Dx Cat Pattern
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Dx Cat Pattern
 
         // Diagnosis 0: "B002"
         var code_buf: [8]u8 = [_]u8{0} ** 8;
         @memcpy(code_buf[0..4], "B002");
-        try file.writeAll(&code_buf);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
         std.mem.writeInt(i32, &b, 400, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(i32, &b, 410, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(i32, &b, 0, .little);
-        try file.writeAll(&b); // Scheme ID
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Scheme ID
     }
-    defer std.fs.cwd().deleteFile(dx_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, dx_filename) catch {};
 
     // Pattern Data: Pattern 0 -> ["hac01"]
     const pat_filename = "test_sdx_pat.bin";
     {
-        const file = try std.fs.cwd().createFile(pat_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, pat_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         // Header
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x44585054, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 20, .little);
-        try file.writeAll(&b); // Entries Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Entries Offset
         std.mem.writeInt(u32, &b, 32, .little);
-        try file.writeAll(&b); // List Data Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // List Data Offset
         std.mem.writeInt(u32, &b, 40, .little);
-        try file.writeAll(&b); // Strings Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Strings Offset
 
         // Entry 0
         std.mem.writeInt(u32, &b, 0, .little);
-        try file.writeAll(&b); // ID
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // ID
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b); // Count
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Count
         std.mem.writeInt(u32, &b, 32, .little);
-        try file.writeAll(&b); // Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Offset
 
         // List Data: StringRef { offset: 40, len: 5 }
         std.mem.writeInt(u32, &b, 40, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 5, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
 
         // Strings: "hac01"
-        try file.writeAll("hac01");
-        try file.writeAll(&[_]u8{0});
+        try std.Io.File.writeStreamingAll(file, std.testing.io, "hac01");
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0});
     }
-    defer std.fs.cwd().deleteFile(pat_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, pat_filename) catch {};
 
     // HAC Desc Data: HAC 1 -> "Foreign Object"
     const hac_filename = "test_sdx_hac.bin";
     {
-        const file = try std.fs.cwd().createFile(hac_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, hac_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         // Header: Magic(4), NumEntries(4), EntriesOff(4), StringsOff(4)
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x48414344, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 1, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b); // Entries Offset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Entries Offset
         std.mem.writeInt(u32, &b, 36, .little);
-        try file.writeAll(&b); // Strings Offset (16 + 20)
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Strings Offset (16 + 20)
 
         // Entry: ID 1, v400-410, Offset 36, Len 14
         var b2: [2]u8 = undefined;
         std.mem.writeInt(u16, &b2, 1, .little);
-        try file.writeAll(&b2); // ID
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b2); // ID
         std.mem.writeInt(u16, &b2, 0, .little);
-        try file.writeAll(&b2); // Pad
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b2); // Pad
         std.mem.writeInt(i32, &b, 400, .little);
-        try file.writeAll(&b); // VStart
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // VStart
         std.mem.writeInt(i32, &b, 410, .little);
-        try file.writeAll(&b); // VEnd
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // VEnd
         std.mem.writeInt(u32, &b, 36, .little);
-        try file.writeAll(&b); // DescOffset
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // DescOffset
         std.mem.writeInt(u32, &b, 14, .little);
-        try file.writeAll(&b); // DescLen
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // DescLen
 
         // Strings
-        try file.writeAll("Foreign Object");
-        try file.writeAll(&[_]u8{0});
+        try std.Io.File.writeStreamingAll(file, std.testing.io, "Foreign Object");
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0});
     }
-    defer std.fs.cwd().deleteFile(hac_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, hac_filename) catch {};
 
     var dx_data = try diagnosis.DiagnosisData.init(dx_filename);
     defer dx_data.deinit();

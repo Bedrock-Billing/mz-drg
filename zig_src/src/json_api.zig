@@ -63,7 +63,7 @@ fn parsePoa(poa_str: ?[]const u8) u8 {
 }
 
 fn mapDiagnosisOutput(allocator: std.mem.Allocator, dx: models.DiagnosisCode) !DiagnosisOutput {
-    var flags_list = std.ArrayListUnmanaged([]const u8){};
+    var flags_list: std.ArrayListUnmanaged([]const u8) = .empty;
     defer flags_list.deinit(allocator);
     // Iterate over flags enum
     inline for (std.meta.fields(models.CodeFlag)) |f| {
@@ -83,7 +83,7 @@ fn mapDiagnosisOutput(allocator: std.mem.Allocator, dx: models.DiagnosisCode) !D
 }
 
 fn mapProcedureOutput(allocator: std.mem.Allocator, proc: models.ProcedureCode) !ProcedureOutput {
-    var flags_list = std.ArrayListUnmanaged([]const u8){};
+    var flags_list: std.ArrayListUnmanaged([]const u8) = .empty;
     defer flags_list.deinit(allocator);
     inline for (std.meta.fields(models.CodeFlag)) |f| {
         if (proc.is(@enumFromInt(f.value))) {
@@ -146,13 +146,13 @@ pub fn processJson(allocator: std.mem.Allocator, grouper_chain: *const msdrg.Gro
     defer final_ctx.deinit();
 
     // 5. Map Output
-    var sdx_out = std.ArrayListUnmanaged(DiagnosisOutput){};
+    var sdx_out: std.ArrayListUnmanaged(DiagnosisOutput) = .empty;
     defer sdx_out.deinit(allocator);
     for (final_ctx.data.sdx_codes.items) |dx| {
         try sdx_out.append(allocator, try mapDiagnosisOutput(allocator, dx));
     }
 
-    var proc_out = std.ArrayListUnmanaged(ProcedureOutput){};
+    var proc_out: std.ArrayListUnmanaged(ProcedureOutput) = .empty;
     defer proc_out.deinit(allocator);
     for (final_ctx.data.procedure_codes.items) |pr| {
         try proc_out.append(allocator, try mapProcedureOutput(allocator, pr));

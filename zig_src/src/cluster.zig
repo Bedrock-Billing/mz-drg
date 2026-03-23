@@ -166,10 +166,10 @@ pub const CodeIterator = struct {
 test "ClusterInfoData accessors" {
     // Create a mock cluster info file
     const filename = "test_cluster_info.bin";
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
     defer {
-        file.close();
-        std.fs.cwd().deleteFile(filename) catch {};
+        std.Io.File.close(file, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, filename) catch {};
     }
 
     // Construct data
@@ -180,16 +180,16 @@ test "ClusterInfoData accessors" {
     // Strings: "CODE1"
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
     const writeU8 = struct {
-        fn call(f: std.fs.File, v: u8) !void {
-            try f.writeAll(&[1]u8{v});
+        fn call(f: std.Io.File, v: u8) !void {
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &[1]u8{v});
         }
     }.call;
 
@@ -217,8 +217,7 @@ test "ClusterInfoData accessors" {
     try writeU32(file, 5); // code len
 
     // Strings (at 100)
-    try file.seekTo(100);
-    try file.writeAll("CODE1");
+    try std.Io.File.writePositionalAll(file, std.testing.io, "CODE1", 100);
 
     // Test reading
     var data = try ClusterInfoData.init(filename);

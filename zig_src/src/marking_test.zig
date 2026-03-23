@@ -9,25 +9,25 @@ test "InitialDiagnosisMarking execution" {
 
     // 1. Create temporary formula file
     const filename = "test_marking_formula.bin";
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
     defer {
-        file.close();
-        std.fs.cwd().deleteFile(filename) catch {};
+        std.Io.File.close(file, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, filename) catch {};
     }
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
     const writeI32 = struct {
-        fn call(f: std.fs.File, v: i32) !void {
+        fn call(f: std.Io.File, v: i32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(i32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
@@ -51,7 +51,7 @@ test "InitialDiagnosisMarking execution" {
     try writeI32(file, 1); // rank
     try writeI32(file, 100); // base_drg
     try writeI32(file, 101); // drg
-    try file.writeAll(&[_]u8{0} ** 8); // surgical
+    try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
     try writeI32(file, 0); // reroute
     try writeI32(file, 1); // severity
     try writeU32(file, 128); // formula_offset
@@ -60,8 +60,7 @@ test "InitialDiagnosisMarking execution" {
     try writeU32(file, 0); // supp_count
 
     // Write formula string at 128
-    try file.seekTo(128);
-    try file.writeAll(formula_str);
+    try std.Io.File.writePositionalAll(file, std.testing.io, formula_str, 128);
 
     // 2. Init FormulaData
     var formula_data = try formula.FormulaData.init(filename);
@@ -99,25 +98,25 @@ test "InitialDiagnosisMarking no match" {
 
     // 1. Create temporary formula file
     const filename = "test_marking_formula_nomatch.bin";
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
     defer {
-        file.close();
-        std.fs.cwd().deleteFile(filename) catch {};
+        std.Io.File.close(file, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, filename) catch {};
     }
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
     const writeI32 = struct {
-        fn call(f: std.fs.File, v: i32) !void {
+        fn call(f: std.Io.File, v: i32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(i32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
@@ -141,7 +140,7 @@ test "InitialDiagnosisMarking no match" {
     try writeI32(file, 1); // rank
     try writeI32(file, 100); // base_drg
     try writeI32(file, 101); // drg
-    try file.writeAll(&[_]u8{0} ** 8); // surgical
+    try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
     try writeI32(file, 0); // reroute
     try writeI32(file, 1); // severity
     try writeU32(file, 128); // formula_offset
@@ -150,8 +149,7 @@ test "InitialDiagnosisMarking no match" {
     try writeU32(file, 0); // supp_count
 
     // Write formula string at 128
-    try file.seekTo(128);
-    try file.writeAll(formula_str);
+    try std.Io.File.writePositionalAll(file, std.testing.io, formula_str, 128);
 
     // 2. Init FormulaData
     var formula_data = try formula.FormulaData.init(filename);
@@ -188,25 +186,25 @@ test "InitialProcedureMarking execution" {
 
     // 1. Create temporary formula file
     const filename = "test_proc_marking_formula.bin";
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
     defer {
-        file.close();
-        std.fs.cwd().deleteFile(filename) catch {};
+        std.Io.File.close(file, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, filename) catch {};
     }
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
     const writeI32 = struct {
-        fn call(f: std.fs.File, v: i32) !void {
+        fn call(f: std.Io.File, v: i32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(i32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
@@ -230,7 +228,7 @@ test "InitialProcedureMarking execution" {
     try writeI32(file, 1); // rank
     try writeI32(file, 100); // base_drg
     try writeI32(file, 101); // drg
-    try file.writeAll(&[_]u8{0} ** 8); // surgical
+    try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
     try writeI32(file, 0); // reroute
     try writeI32(file, 1); // severity
     try writeU32(file, 128); // formula_offset
@@ -239,8 +237,7 @@ test "InitialProcedureMarking execution" {
     try writeU32(file, 0); // supp_count
 
     // Write formula string at 128
-    try file.seekTo(128);
-    try file.writeAll(formula_str);
+    try std.Io.File.writePositionalAll(file, std.testing.io, formula_str, 128);
 
     // 2. Init FormulaData
     var formula_data = try formula.FormulaData.init(filename);

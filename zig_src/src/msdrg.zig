@@ -42,6 +42,7 @@ pub const GrouperChain = struct {
     link_v420: ?chain.Link = null,
     link_v421: ?chain.Link = null,
     link_v430: ?chain.Link = null,
+    link_v431: ?chain.Link = null,
 
     pub fn init(allocator: std.mem.Allocator, data_dir: []const u8) !GrouperChain {
         // Helper to join paths
@@ -141,6 +142,7 @@ pub const GrouperChain = struct {
         self.link_v420 = try self.createInternal(420);
         self.link_v421 = try self.createInternal(421);
         self.link_v430 = try self.createInternal(430);
+        self.link_v431 = try self.createInternal(431);
     }
 
     pub fn deinit(self: *GrouperChain) void {
@@ -152,6 +154,7 @@ pub const GrouperChain = struct {
         if (self.link_v420) |*l| l.deinit(self.allocator);
         if (self.link_v421) |*l| l.deinit(self.allocator);
         if (self.link_v430) |*l| l.deinit(self.allocator);
+        if (self.link_v431) |*l| l.deinit(self.allocator);
 
         // Free data sources
         self.cluster_info.deinit();
@@ -173,7 +176,7 @@ pub const GrouperChain = struct {
     /// Returns the pre-built Link for the given version.
     /// This is lock-free and thread-safe since the Link struct is small and
     /// only contains pointers to immutable data.
-    /// Returns error.VersionNotSupported if version is not one of: 400, 401, 410, 411, 420, 421, 430.
+    /// Returns error.VersionNotSupported if version is not one of: 400, 401, 410, 411, 420, 421, 430, 431.
     pub fn getLink(self: *const GrouperChain, version: i32) !chain.Link {
         return switch (version) {
             400 => self.link_v400 orelse error.VersionNotSupported,
@@ -183,6 +186,7 @@ pub const GrouperChain = struct {
             420 => self.link_v420 orelse error.VersionNotSupported,
             421 => self.link_v421 orelse error.VersionNotSupported,
             430 => self.link_v430 orelse error.VersionNotSupported,
+            431 => self.link_v431 orelse error.VersionNotSupported,
             else => error.VersionNotSupported,
         };
     }

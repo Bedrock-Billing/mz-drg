@@ -12,22 +12,22 @@ test "MsdrgFinalPreGrouping logic" {
     // Formula Data: MDC 0, Formula "MCC" -> DRG 1
     const formula_filename = "test_final_grouping_formula.bin";
     {
-        const file = try std.fs.cwd().createFile(formula_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, formula_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
 
         const writeU32 = struct {
-            fn call(f: std.fs.File, v: u32) !void {
+            fn call(f: std.Io.File, v: u32) !void {
                 var b: [4]u8 = undefined;
                 std.mem.writeInt(u32, &b, v, .little);
-                try f.writeAll(&b);
+                try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
             }
         }.call;
 
         const writeI32 = struct {
-            fn call(f: std.fs.File, v: i32) !void {
+            fn call(f: std.Io.File, v: i32) !void {
                 var b: [4]u8 = undefined;
                 std.mem.writeInt(i32, &b, v, .little);
-                try f.writeAll(&b);
+                try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
             }
         }.call;
 
@@ -51,7 +51,7 @@ test "MsdrgFinalPreGrouping logic" {
         try writeI32(file, 1); // rank
         try writeI32(file, 1); // base_drg
         try writeI32(file, 1); // drg
-        try file.writeAll(&[_]u8{0} ** 8); // surgical
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
         try writeI32(file, 0); // reroute
         try writeI32(file, 0); // severity
         try writeU32(file, 100); // formula_offset
@@ -60,27 +60,26 @@ test "MsdrgFinalPreGrouping logic" {
         try writeU32(file, 0); // supp_count
 
         // Strings
-        try file.seekTo(100);
-        try file.writeAll("MCC");
+        try std.Io.File.writePositionalAll(file, std.testing.io, "MCC", 100);
     }
-    defer std.fs.cwd().deleteFile(formula_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, formula_filename) catch {};
 
     // Description Data (Dummy)
     const desc_filename = "test_final_grouping_desc.bin";
     {
-        const file = try std.fs.cwd().createFile(desc_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, desc_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x44455343, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 0, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
     }
-    defer std.fs.cwd().deleteFile(desc_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, desc_filename) catch {};
 
     var formula_data = try formula.FormulaData.init(formula_filename);
     defer formula_data.deinit();
@@ -123,19 +122,19 @@ test "MsdrgFinalDrgResults logic" {
     // Setup dummy description data
     const desc_filename = "test_final_results_desc.bin";
     {
-        const file = try std.fs.cwd().createFile(desc_filename, .{ .read = true });
-        defer file.close();
+        const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, desc_filename, .{ .read = true });
+        defer std.Io.File.close(file, std.testing.io);
         var b: [4]u8 = undefined;
         std.mem.writeInt(u32, &b, 0x44455343, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 0, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
         std.mem.writeInt(u32, &b, 16, .little);
-        try file.writeAll(&b);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
     }
-    defer std.fs.cwd().deleteFile(desc_filename) catch {};
+    defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, desc_filename) catch {};
 
     var desc_data = try description.DescriptionData.init(desc_filename, 0x44455343);
     defer desc_data.deinit();

@@ -112,25 +112,25 @@ pub const FormulaData = struct {
 
 test "FormulaData lookup" {
     const filename = "test_formula.bin";
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
     defer {
-        file.close();
-        std.fs.cwd().deleteFile(filename) catch {};
+        std.Io.File.close(file, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, filename) catch {};
     }
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
     const writeI32 = struct {
-        fn call(f: std.fs.File, v: i32) !void {
+        fn call(f: std.Io.File, v: i32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(i32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
@@ -426,7 +426,7 @@ pub const Evaluator = struct {
                 }
                 return true;
             },
-            .Not => |_| {
+            .Not => {
                 return true;
             },
             .Contains => |n| {

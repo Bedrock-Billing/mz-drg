@@ -244,25 +244,25 @@ pub const HacOperandData = struct {
 
 test "HacData lookup" {
     const filename = "test_hac.bin";
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
     defer {
-        file.close();
-        std.fs.cwd().deleteFile(filename) catch {};
+        std.Io.File.close(file, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, filename) catch {};
     }
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
     const writeU16 = struct {
-        fn call(f: std.fs.File, v: u16) !void {
+        fn call(f: std.Io.File, v: u16) !void {
             var b: [2]u8 = undefined;
             std.mem.writeInt(u16, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
@@ -290,8 +290,8 @@ test "HacData lookup" {
     try writeU32(file, 5); // desc_len
 
     // Strings
-    try file.writeAll("Desc1");
-    try file.writeAll("Desc2");
+    try std.Io.File.writeStreamingAll(file, std.testing.io, "Desc1");
+    try std.Io.File.writeStreamingAll(file, std.testing.io, "Desc2");
 
     var desc_data = try HacDescriptionData.init(filename);
     defer desc_data.deinit();
@@ -372,7 +372,7 @@ pub const MsdrgHacProcessor = struct {
 
                     const res = try codes_with_hacs.getOrPut(hac.hac_number);
                     if (!res.found_existing) {
-                        res.value_ptr.* = .{};
+                        res.value_ptr.* = .empty;
                     }
                     try res.value_ptr.append(allocator, sdx);
                 }
@@ -520,7 +520,7 @@ pub const MsdrgHacProcessor = struct {
         for (sdx_codes.items) |*sdx| {
             var contains_six = false;
             var criteria_met = false;
-            var update_hac_list = std.ArrayList(models.Hac){};
+            var update_hac_list: std.ArrayList(models.Hac) = .empty;
 
             if (sdx.hacs.items.len == 0) {
                 update_hac_list.deinit(allocator);
@@ -611,30 +611,30 @@ test "MsdrgHacProcessor execution" {
     const desc_filename = "test_hac_desc_proc.bin";
     const formula_filename = "test_hac_formula_proc.bin";
 
-    const file_desc = try std.fs.cwd().createFile(desc_filename, .{ .read = true });
+    const file_desc = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, desc_filename, .{ .read = true });
     defer {
-        file_desc.close();
-        std.fs.cwd().deleteFile(desc_filename) catch {};
+        std.Io.File.close(file_desc, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, desc_filename) catch {};
     }
-    const file_formula = try std.fs.cwd().createFile(formula_filename, .{ .read = true });
+    const file_formula = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, formula_filename, .{ .read = true });
     defer {
-        file_formula.close();
-        std.fs.cwd().deleteFile(formula_filename) catch {};
+        std.Io.File.close(file_formula, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, formula_filename) catch {};
     }
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
     const writeU16 = struct {
-        fn call(f: std.fs.File, v: u16) !void {
+        fn call(f: std.Io.File, v: u16) !void {
             var b: [2]u8 = undefined;
             std.mem.writeInt(u16, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
@@ -664,7 +664,7 @@ test "MsdrgHacProcessor execution" {
     try writeU32(file_formula, 9);
 
     // Strings (at 44): "TEST_ATTR"
-    try file_formula.writeAll("TEST_ATTR");
+    try std.Io.File.writeStreamingAll(file_formula, std.testing.io, "TEST_ATTR");
 
     // 2. Init Processor
     var desc_data = try HacDescriptionData.init(desc_filename);

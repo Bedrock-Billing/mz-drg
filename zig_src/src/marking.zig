@@ -291,7 +291,7 @@ pub const InitialProcedureMarking = struct {
             _ = try formula.Evaluator.collectMatchedAttributes(root, &mask, &formula_attributes, allocator, mdc);
 
             // Filter attributes for Procedure Marking
-            var proc_attributes = std.ArrayList([]const u8){};
+            var proc_attributes: std.ArrayList([]const u8) = .empty;
             defer proc_attributes.deinit(allocator);
 
             var it = formula_attributes.keyIterator();
@@ -365,7 +365,7 @@ pub const InitialProcedureMarking = struct {
                     attr_loop: for (proc_attributes.items) |attr_str| {
                         // Complete System Tie Breaker
                         if (COMPLETE_SYSTEM.has(attr_str)) {
-                            var proc_codes_with_attr = std.ArrayList(*models.ProcedureCode){};
+                            var proc_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
                             defer proc_codes_with_attr.deinit(allocator);
 
                             for (data.procedure_codes.items) |*proc| {
@@ -375,7 +375,7 @@ pub const InitialProcedureMarking = struct {
                                 }
                             }
 
-                            var cluster_codes_with_attr = std.ArrayList(*models.ProcedureCode){};
+                            var cluster_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
                             defer cluster_codes_with_attr.deinit(allocator);
 
                             for (data.clusters.items) |*cluster| {
@@ -776,7 +776,7 @@ pub const FinalProcedureMarking = struct {
 
             _ = try formula.Evaluator.collectMatchedAttributes(root, &mask, &formula_attributes, allocator, mdc);
 
-            var proc_attributes = std.ArrayList([]const u8){};
+            var proc_attributes: std.ArrayList([]const u8) = .empty;
             defer proc_attributes.deinit(allocator);
 
             var it = formula_attributes.keyIterator();
@@ -850,7 +850,7 @@ pub const FinalProcedureMarking = struct {
                 if (!one_proc_found) {
                     attr_loop: for (proc_attributes.items) |attr_str| {
                         if (COMPLETE_SYSTEM.has(attr_str)) {
-                            var proc_codes_with_attr = std.ArrayList(*models.ProcedureCode){};
+                            var proc_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
                             defer proc_codes_with_attr.deinit(allocator);
 
                             for (data.procedure_codes.items) |*proc| {
@@ -860,7 +860,7 @@ pub const FinalProcedureMarking = struct {
                                 }
                             }
 
-                            var cluster_codes_with_attr = std.ArrayList(*models.ProcedureCode){};
+                            var cluster_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
                             defer cluster_codes_with_attr.deinit(allocator);
 
                             for (data.clusters.items) |*cluster| {

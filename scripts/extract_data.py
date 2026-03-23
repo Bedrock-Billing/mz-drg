@@ -11,12 +11,12 @@ import json
 JAR_DIR = os.path.join(os.getcwd(), "jars")
 DATA_DIR = os.path.join(os.getcwd(), "data")
 jars = [
-    "msdrg-binary-access-1.4.2.jar",
+    "msdrg-binary-access-1.5.0.jar",
     "protobuf-java-3.22.2.jar",
-    "msdrg-model-v2-2.10.0.jar",
+    "msdrg-model-v2-2.11.0.jar",
     "gfc-base-api-3.4.9.jar",
     "gfc-base-factory-3.4.9.jar",
-    "msdrg-v430-43.0.0.2.jar"
+    "msdrg-core-43.1.0.0.jar"
 ]
 
 classpath = [os.path.join(JAR_DIR, jar) for jar in jars]

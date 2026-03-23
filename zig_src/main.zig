@@ -2,13 +2,10 @@ const std = @import("std");
 const msdrg = @import("src/msdrg.zig");
 const models = @import("src/models.zig");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const allocator = std.heap.page_allocator;
 
-    const args = try std.process.argsAlloc(allocator);
-    defer std.process.argsFree(allocator, args);
+    const args = init.minimal.args.vector;
 
     if (args.len < 2) {
         std.debug.print("Usage: {s} <data_dir>\n", .{args[0]});
@@ -20,7 +17,7 @@ pub fn main() !void {
 
     // Note: This expects the actual binary files to exist in data_dir.
     // If they don't exist, init will fail.
-    var chain = msdrg.GrouperChain.init(allocator, data_dir) catch |err| {
+    var chain = msdrg.GrouperChain.init(allocator, std.mem.span(data_dir)) catch |err| {
         std.debug.print("Failed to initialize chain: {}\n", .{err});
         return;
     };

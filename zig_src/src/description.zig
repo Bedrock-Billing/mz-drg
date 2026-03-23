@@ -81,25 +81,25 @@ pub const DescriptionData = struct {
 
 test "DescriptionData lookup" {
     const filename = "test_description.bin";
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
     defer {
-        file.close();
-        std.fs.cwd().deleteFile(filename) catch {};
+        std.Io.File.close(file, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, filename) catch {};
     }
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
     const writeU16 = struct {
-        fn call(f: std.fs.File, v: u16) !void {
+        fn call(f: std.Io.File, v: u16) !void {
             var b: [2]u8 = undefined;
             std.mem.writeInt(u16, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
@@ -126,8 +126,8 @@ test "DescriptionData lookup" {
     try writeU32(file, 5); // desc_len
 
     // Strings
-    try file.writeAll("Desc1");
-    try file.writeAll("Desc2");
+    try std.Io.File.writeStreamingAll(file, std.testing.io, "Desc1");
+    try std.Io.File.writeStreamingAll(file, std.testing.io, "Desc2");
 
     var data = try DescriptionData.init(filename, 0x42445247);
     defer data.deinit();

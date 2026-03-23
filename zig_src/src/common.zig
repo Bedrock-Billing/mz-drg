@@ -21,19 +21,28 @@ pub const StringRef = extern struct {
 
 pub fn MappedFile(comptime HeaderType: type) type {
     return struct {
-        file: std.fs.File,
+        file: std.Io.File,
         data: []align(std.heap.page_size_min) u8,
         header: *const HeaderType,
         base_ptr: [*]const u8,
+        threaded: std.Io.Threaded,
 
         const Self = @This();
 
         pub fn init(path: []const u8, magic: u32) !Self {
-            const file = try std.fs.cwd().openFile(path, .{});
-            errdefer file.close();
+            const allocator = std.heap.page_allocator;
+            var threaded = std.Io.Threaded.init(allocator, .{});
+            const io = threaded.io();
+            errdefer threaded.deinit();
 
-            const file_size = try file.getEndPos();
-            const data = try std.posix.mmap(null, file_size, std.posix.PROT.READ, .{ .TYPE = .PRIVATE }, file.handle, 0);
+            const file = try std.Io.Dir.openFile(std.Io.Dir.cwd(), io, path, .{});
+            errdefer std.Io.File.close(file, io);
+
+            const file_size = try std.Io.File.length(file, io);
+            const data = try std.posix.mmap(null, file_size, std.posix.PROT{
+                .READ = true,
+                .WRITE = false,
+            }, .{ .TYPE = .PRIVATE }, file.handle, 0);
             errdefer std.posix.munmap(data);
 
             const header = @as(*const HeaderType, @ptrCast(data.ptr));
@@ -47,12 +56,14 @@ pub fn MappedFile(comptime HeaderType: type) type {
                 .data = data,
                 .header = header,
                 .base_ptr = @as([*]const u8, @ptrCast(data.ptr)),
+                .threaded = threaded,
             };
         }
 
         pub fn deinit(self: *Self) void {
             std.posix.munmap(self.data);
-            self.file.close();
+            std.Io.File.close(self.file, self.threaded.io());
+            self.threaded.deinit();
         }
     };
 }

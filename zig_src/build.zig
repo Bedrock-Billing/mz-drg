@@ -25,7 +25,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    lib.linkLibC();
+    lib.is_linking_libc = true;
 
     b.installArtifact(lib);
 

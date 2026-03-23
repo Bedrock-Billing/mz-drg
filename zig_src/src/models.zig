@@ -214,14 +214,14 @@ pub const Attribute = struct {
 pub const DiagnosisCode = struct {
     value: common.Code,
     poa: u8, // 'Y', 'N', 'U', 'W', '1'
-    attributes: std.ArrayList(Attribute) = .{},
-    dx_cat_attributes: std.ArrayList(Attribute) = .{},
-    hac_attributes: std.ArrayList(Attribute) = .{},
+    attributes: std.ArrayList(Attribute) = .empty,
+    dx_cat_attributes: std.ArrayList(Attribute) = .empty,
+    hac_attributes: std.ArrayList(Attribute) = .empty,
     flags: std.EnumSet(CodeFlag),
     mdc: ?i32,
     severity: Severity,
-    hacs: std.ArrayList(Hac) = .{},
-    hacs_flags: std.ArrayList(Hac) = .{},
+    hacs: std.ArrayList(Hac) = .empty,
+    hacs_flags: std.ArrayList(Hac) = .empty,
     drg_impact: GroupingImpact,
     initial_severity_flag: CodeSeverityFlag,
     final_severity_flag: CodeSeverityFlag,
@@ -287,9 +287,9 @@ pub const DiagnosisCode = struct {
 
 pub const ProcedureCode = struct {
     value: common.Code,
-    attributes: std.ArrayList(Attribute) = .{},
+    attributes: std.ArrayList(Attribute) = .empty,
     flags: std.EnumSet(CodeFlag),
-    cluster_ids: std.ArrayList([]const u8) = .{},
+    cluster_ids: std.ArrayList([]const u8) = .empty,
     is_operating_room: bool,
     mdc_suppression: std.bit_set.IntegerBitSet(32),
     is_valid_code: bool,
@@ -340,9 +340,9 @@ pub const ProcessingData = struct {
     principal_dx: ?DiagnosisCode,
     principal_proc: ?ProcedureCode,
     admit_dx: ?DiagnosisCode,
-    sdx_codes: std.ArrayList(DiagnosisCode) = .{},
-    procedure_codes: std.ArrayList(ProcedureCode) = .{},
-    clusters: std.ArrayList(ProcedureCode) = .{},
+    sdx_codes: std.ArrayList(DiagnosisCode) = .empty,
+    procedure_codes: std.ArrayList(ProcedureCode) = .empty,
+    clusters: std.ArrayList(ProcedureCode) = .empty,
 
     age: i32,
     sex: Sex,
@@ -418,8 +418,8 @@ pub const ProcessingContext = struct {
     runtime: RuntimeOptions,
     initial_grouping_context: GroupingContext,
     final_grouping_context: GroupingContext,
-    initial_mdc: std.ArrayList(i32) = .{},
-    final_mdc: std.ArrayList(i32) = .{},
+    initial_mdc: std.ArrayList(i32) = .empty,
+    final_mdc: std.ArrayList(i32) = .empty,
     allocator: std.mem.Allocator,
 
     pub fn init(allocator: std.mem.Allocator, data: *ProcessingData, runtime: RuntimeOptions) ProcessingContext {

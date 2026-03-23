@@ -60,17 +60,17 @@ pub const PatternData = struct {
 
 test "PatternData lookup" {
     const filename = "test_pattern.bin";
-    const file = try std.fs.cwd().createFile(filename, .{ .read = true });
+    const file = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, filename, .{ .read = true });
     defer {
-        file.close();
-        std.fs.cwd().deleteFile(filename) catch {};
+        std.Io.File.close(file, std.testing.io);
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, filename) catch {};
     }
 
     const writeU32 = struct {
-        fn call(f: std.fs.File, v: u32) !void {
+        fn call(f: std.Io.File, v: u32) !void {
             var b: [4]u8 = undefined;
             std.mem.writeInt(u32, &b, v, .little);
-            try f.writeAll(&b);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
         }
     }.call;
 
@@ -106,8 +106,8 @@ test "PatternData lookup" {
     try writeU32(file, 3);
 
     // Write Strings
-    try file.writeAll("ABC");
-    try file.writeAll("DEF");
+    try std.Io.File.writeStreamingAll(file, std.testing.io, "ABC");
+    try std.Io.File.writeStreamingAll(file, std.testing.io, "DEF");
 
     var data = try PatternData.init(filename, 0x44585054);
     defer data.deinit();
