@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "msdrg"
+version = "0.1.0"
+description = "High-performance MS-DRG (Medicare Severity Diagnosis Related Groups) grouper"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    {name = "MZ-DRG Contributors"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Healthcare Industry",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Zig",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+keywords = ["drg", "ms-drg", "grouper", "healthcare", "medicare"]
+
+[project.urls]
+Homepage = "https://github.com/Bedrock-Billing/mz-drg"
+Repository = "https://github.com/Bedrock-Billing/mz-drg"
+
+[tool.setuptools.packages.find]
+include = ["msdrg*"]
+
+[tool.setuptools.package-data]
+msdrg = [
+    "_lib/*",
+    "data/*.bin",
+]

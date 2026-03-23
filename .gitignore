@@ -40,6 +40,10 @@ ENV/
 env.bak/
 venv.bak/
 
+# Build artifacts inside package
+msdrg/_lib/
+msdrg/data/
+
 # Zig
 zig-cache/
 zig-out/
