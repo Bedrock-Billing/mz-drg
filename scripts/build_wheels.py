@@ -43,7 +43,7 @@ DIST_DIR = ROOT_DIR / "dist"
 
 # Package metadata (keep in sync with pyproject.toml)
 PACKAGE_NAME = "msdrg"
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 PYTHON_TAG = "py3"
 ABI_TAG = "none"
 

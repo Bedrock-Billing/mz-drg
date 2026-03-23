@@ -22,5 +22,5 @@ Usage:
 
 from msdrg.grouper import MsdrgGrouper, create_claim
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = ["MsdrgGrouper", "create_claim"]
