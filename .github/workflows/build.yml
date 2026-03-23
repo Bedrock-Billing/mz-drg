@@ -1,0 +1,129 @@
+name: Build & Publish
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build wheels (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-linux
+          - aarch64-linux
+          - x86_64-windows
+          - x86_64-macos
+          - aarch64-macos
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.16.0-dev.2915+065c6e794
+
+      - name: Install dependencies
+        run: pip install wheel
+
+      - name: Build wheel
+        run: python scripts/build_wheels.py ${{ matrix.target }}
+
+      - name: Upload wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install setuptools wheel
+
+      - name: Build sdist
+        run: python setup.py sdist
+
+      - name: Upload sdist
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  test:
+    name: Test wheel
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download Linux x86_64 wheel
+        uses: actions/download-artifact@v4
+        with:
+          name: wheel-x86_64-linux
+          path: dist/
+
+      - name: Install wheel
+        run: pip install dist/*.whl
+
+      - name: Smoke test
+        run: |
+          python -c "
+          import msdrg
+          with msdrg.MsdrgGrouper() as g:
+              r = g.group({
+                  'version': 431, 'age': 65, 'sex': 0,
+                  'discharge_status': 1,
+                  'pdx': {'code': 'I5020'},
+                  'sdx': [], 'procedures': []
+              })
+              assert r['final_drg'] == 293, f'Expected DRG 293, got {r[\"final_drg\"]}'
+              assert r['final_mdc'] == 5, f'Expected MDC 5, got {r[\"final_mdc\"]}'
+              assert r['return_code'] == 'OK'
+              print(f'OK: DRG={r[\"final_drg\"]}, MDC={r[\"final_mdc\"]}')
+          "
+
+  publish:
+    name: Publish to PyPI
+    needs: [build, sdist, test]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      id-token: write  # Required for trusted publishing
+    environment:
+      name: pypi
+      url: https://pypi.org/p/msdrg
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "*"
+          path: dist/
+          merge-multiple: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

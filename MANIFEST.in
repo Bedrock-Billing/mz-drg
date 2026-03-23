@@ -1,0 +1,10 @@
+include LICENSE
+include README.md
+include pyproject.toml
+include setup.py
+recursive-include msdrg *.py
+recursive-include msdrg/data *.bin
+recursive-include zig_src *.zig build.zig
+recursive-include scripts *.py *.sh
+recursive-include data/bin *.bin
+recursive-exclude msdrg/_lib *
