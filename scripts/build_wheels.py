@@ -161,31 +161,47 @@ Tag: {PYTHON_TAG}-{ABI_TAG}-{platform_tag}
         whl.writestr(f"{dist_info_prefix}/WHEEL", wheel_content)
 
         # METADATA
-        metadata_content = f"""Metadata-Version: 2.1
-Name: {PACKAGE_NAME}
-Version: {VERSION}
-Summary: High-performance MS-DRG (Medicare Severity Diagnosis Related Groups) grouper
-Home-page: https://github.com/Bedrock-Billing/mz-drg
-License: MIT
-Platform: any
-Requires-Python: >=3.11
-"""
+        readme_path = ROOT_DIR / "README.md"
+        readme_text = readme_path.read_text() if readme_path.exists() else ""
+        metadata_content = (
+            f"Metadata-Version: 2.1\n"
+            f"Name: {PACKAGE_NAME}\n"
+            f"Version: {VERSION}\n"
+            f"Summary: High-performance MS-DRG (Medicare Severity Diagnosis Related Groups) grouper\n"
+            f"Home-page: https://github.com/Bedrock-Billing/mz-drg\n"
+            f"License: MIT\n"
+            f"Requires-Python: >=3.11\n"
+            f"Description-Content-Type: text/markdown\n"
+            f"\n"
+            f"{readme_text}"
+        )
         whl.writestr(f"{dist_info_prefix}/METADATA", metadata_content)
 
         # RECORD (hashes of all files)
-        record_lines = []
-        for info in whl.infolist():
-            if info.filename == f"{dist_info_prefix}/RECORD":
-                record_lines.append(f"{info.filename},,")
-            else:
-                data = whl.read(info.filename)
-                import hashlib
-                import base64
+        # First pass: compute hashes for all non-RECORD files
+        import hashlib
+        import base64
 
-                digest = hashlib.sha256(data).digest()
-                b64 = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
-                record_lines.append(f"{info.filename},sha256={b64},{info.file_size}")
-        whl.writestr(f"{dist_info_prefix}/RECORD", "\n".join(record_lines) + "\n")
+        record_entries = {}  # filename -> (hash_str, size)
+        for info in whl.infolist():
+            fname = info.filename
+            if fname.endswith("/RECORD"):
+                continue
+            data = whl.read(fname)
+            digest = hashlib.sha256(data).digest()
+            b64 = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+            record_entries[fname] = (f"sha256={b64}", info.file_size)
+
+        # Build RECORD content (RECORD itself gets no hash)
+        record_fname = f"{dist_info_prefix}/RECORD"
+        lines = []
+        for fname in sorted(record_entries.keys()):
+            hash_str, size = record_entries[fname]
+            lines.append(f"{fname},{hash_str},{size}")
+        # RECORD's own entry: no hash, no size
+        lines.append(f"{record_fname},,")
+        record_content = "\n".join(lines) + "\n"
+        whl.writestr(record_fname, record_content)
 
     return wheel_path
 
