@@ -133,10 +133,13 @@ class BuildZigExt(build_ext):
         """Compile the Zig shared library."""
         lib_name = get_lib_name()
         zig_out_lib = ZIG_SRC_DIR / "zig-out" / "lib" / lib_name
+        # On Windows, DLLs may end up in bin/ instead of lib/
+        zig_out_bin = ZIG_SRC_DIR / "zig-out" / "bin" / lib_name
 
         # Clean previous build output
-        if zig_out_lib.exists():
-            zig_out_lib.unlink()
+        for p in (zig_out_lib, zig_out_bin):
+            if p.exists():
+                p.unlink()
 
         print(f"Building Zig shared library ({lib_name})...")
 
@@ -151,9 +154,15 @@ class BuildZigExt(build_ext):
             cwd=str(ZIG_SRC_DIR),
         )
 
-        if not zig_out_lib.exists():
+        # Find the built library (check lib/ then bin/)
+        if zig_out_lib.exists():
+            built_lib = zig_out_lib
+        elif zig_out_bin.exists():
+            built_lib = zig_out_bin
+        else:
             raise RuntimeError(
-                f"Zig build succeeded but library not found at {zig_out_lib}"
+                f"Zig build succeeded but library not found.\n"
+                f"Searched:\n  - {zig_out_lib}\n  - {zig_out_bin}"
             )
 
         # Copy library to package _lib directory
@@ -162,7 +171,7 @@ class BuildZigExt(build_ext):
         dest_lib = dest_lib_dir / lib_name
 
         print(f"Installing library: {dest_lib}")
-        shutil.copy2(str(zig_out_lib), str(dest_lib))
+        shutil.copy2(str(built_lib), str(dest_lib))
 
     def _copy_data_files(self):
         """Copy binary data files to the package data directory."""

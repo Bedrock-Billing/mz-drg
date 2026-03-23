@@ -50,10 +50,16 @@ def _find_library() -> str:
     if dev_path.exists():
         return str(dev_path)
 
+    # 3. Windows may put DLLs in bin/ instead of lib/
+    dev_bin_path = pkg_dir.parent / "zig_src" / "zig-out" / "bin" / lib_name
+    if dev_bin_path.exists():
+        return str(dev_bin_path)
+
     raise FileNotFoundError(
         f"Could not find {lib_name}. Searched:\n"
         f"  - {pkg_dir / '_lib' / lib_name}\n"
         f"  - {dev_path}\n"
+        f"  - {dev_bin_path}\n"
         f"Make sure the package is installed correctly or run 'zig build' in zig_src/."
     )
 

@@ -5,19 +5,21 @@ const models = @import("src/models.zig");
 pub fn main(init: std.process.Init) !void {
     const allocator = std.heap.page_allocator;
 
-    const args = init.minimal.args.vector;
+    // Use cross-platform argument iterator (handles UTF-16 on Windows)
+    var arg_iter = try std.process.Args.Iterator.initAllocator(init.minimal.args, allocator);
+    defer arg_iter.deinit();
 
-    if (args.len < 2) {
-        std.debug.print("Usage: {s} <data_dir>\n", .{args[0]});
+    // Skip argv[0] (program name)
+    _ = arg_iter.next();
+
+    const data_dir = arg_iter.next() orelse {
+        std.debug.print("Usage: msdrg <data_dir>\n", .{});
         return;
-    }
-    const data_dir = args[1];
+    };
 
     std.debug.print("Initializing GrouperChain from {s}...\n", .{data_dir});
 
-    // Note: This expects the actual binary files to exist in data_dir.
-    // If they don't exist, init will fail.
-    var chain = msdrg.GrouperChain.init(allocator, std.mem.span(data_dir)) catch |err| {
+    var chain = msdrg.GrouperChain.init(allocator, data_dir) catch |err| {
         std.debug.print("Failed to initialize chain: {}\n", .{err});
         return;
     };
