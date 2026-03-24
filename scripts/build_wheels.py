@@ -40,9 +40,21 @@ MSDRG_PKG_DIR = ROOT_DIR / "msdrg"
 DATA_SRC_DIR = ROOT_DIR / "data" / "bin"
 DIST_DIR = ROOT_DIR / "dist"
 
-# Package metadata (keep in sync with pyproject.toml)
+
+def _read_version() -> str:
+    """Read version from pyproject.toml — the single source of truth."""
+    pyproject = ROOT_DIR / "pyproject.toml"
+    for line in pyproject.read_text().splitlines():
+        line = line.strip()
+        if line.startswith("version") and "=" in line:
+            # Handles: version = "0.1.1"
+            return line.split("=", 1)[1].strip().strip('"').strip("'")
+    raise RuntimeError(f"Could not find version in {pyproject}")
+
+
+# Package metadata
 PACKAGE_NAME = "msdrg"
-VERSION = "0.1.1"
+VERSION = _read_version()
 PYTHON_TAG = "py3"
 ABI_TAG = "none"
 

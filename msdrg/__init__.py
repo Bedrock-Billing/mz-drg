@@ -27,7 +27,12 @@ from msdrg.grouper import (
     create_claim,
 )
 
-__version__ = "0.1.1"
+from importlib.metadata import version as _get_version, PackageNotFoundError
+
+try:
+    __version__: str = _get_version("msdrg")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 
 __all__ = [
     # Main class
