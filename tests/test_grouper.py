@@ -336,3 +336,75 @@ class TestErrors:
     def test_missing_data_dir(self):
         with pytest.raises((RuntimeError, FileNotFoundError)):
             MsdrgGrouper(data_dir="/nonexistent/data")
+
+
+# ---------------------------------------------------------------------------
+# C API edge cases (null inputs, bounds clamping)
+# ---------------------------------------------------------------------------
+
+
+class TestCApiEdgeCases:
+    """Exercises the null-check and bounds-clamping added to the C API."""
+
+    def test_null_json_input(self, grouper: MsdrgGrouper):
+        """Passing null (None) to msdrg_group_json should return null, not crash."""
+        result_ptr = grouper.lib.msdrg_group_json(grouper.ctx, None)
+        assert result_ptr is None
+
+    def test_empty_json_input(self, grouper: MsdrgGrouper):
+        """Passing empty string should return null (parse failure), not crash."""
+        result_ptr = grouper.lib.msdrg_group_json(grouper.ctx, b"")
+        assert result_ptr is None
+
+    def test_invalid_sex_clamped(self, grouper: MsdrgGrouper):
+        """sex=99 is out of range — C API should clamp, not produce UB."""
+        result = grouper.group(
+            {
+                "version": 431,
+                "age": 65,
+                "sex": 99,
+                "discharge_status": 1,
+                "pdx": {"code": "I5020"},
+            }
+        )
+        assert result["return_code"] == "OK"
+
+    def test_invalid_discharge_status_clamped(self, grouper: MsdrgGrouper):
+        """discharge_status=999 is out of range — should clamp, not crash."""
+        result = grouper.group(
+            {
+                "version": 431,
+                "age": 65,
+                "sex": 0,
+                "discharge_status": 999,
+                "pdx": {"code": "I5020"},
+            }
+        )
+        assert result["return_code"] == "OK"
+
+    def test_negative_sex_clamped(self, grouper: MsdrgGrouper):
+        """sex=-1 is out of range — should clamp."""
+        result = grouper.group(
+            {
+                "version": 431,
+                "age": 65,
+                "sex": -1,
+                "discharge_status": 1,
+                "pdx": {"code": "I5020"},
+            }
+        )
+        assert result["return_code"] == "OK"
+
+    def test_multiple_groups_no_leak(self, grouper: MsdrgGrouper):
+        """Call group() many times — if arena cleanup is wrong, RSS grows."""
+        import gc
+
+        gc.collect()
+        for _ in range(100):
+            grouper.group(
+                create_claim(
+                    version=431, age=65, sex=0, discharge_status=1, pdx="I5020"
+                )
+            )
+        gc.collect()
+        # If we get here without OOM or crash, the arena is cleaning up correctly

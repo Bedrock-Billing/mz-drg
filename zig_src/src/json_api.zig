@@ -33,7 +33,6 @@ pub const OutputResult = struct {
     initial_mdc_description: ?[]const u8 = null,
     final_mdc_description: ?[]const u8 = null,
     return_code: []const u8,
-    // Detailed output can be added here
     pdx_output: ?DiagnosisOutput = null,
     sdx_output: []const DiagnosisOutput = &.{},
     proc_output: []const ProcedureOutput = &.{},
@@ -59,64 +58,78 @@ fn parsePoa(poa_str: ?[]const u8) u8 {
     if (poa_str) |s| {
         if (s.len > 0) return s[0];
     }
-    return ' '; // Default or blank
+    return ' ';
 }
 
-fn mapDiagnosisOutput(allocator: std.mem.Allocator, dx: models.DiagnosisCode) !DiagnosisOutput {
+fn intToEnum(comptime T: type, v: i32, default: T) T {
+    inline for (std.meta.fields(T)) |f| {
+        if (v == f.value) return @enumFromInt(f.value);
+    }
+    return default;
+}
+
+fn mapDiagnosisOutput(arena: std.mem.Allocator, dx: models.DiagnosisCode) !DiagnosisOutput {
     var flags_list: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer flags_list.deinit(allocator);
-    // Iterate over flags enum
     inline for (std.meta.fields(models.CodeFlag)) |f| {
         if (dx.is(@enumFromInt(f.value))) {
-            try flags_list.append(allocator, @tagName(@as(models.CodeFlag, @enumFromInt(f.value))));
+            try flags_list.append(arena, @tagName(@as(models.CodeFlag, @enumFromInt(f.value))));
         }
     }
 
     return DiagnosisOutput{
-        .code = try allocator.dupe(u8, dx.value.toSlice()),
+        .code = try arena.dupe(u8, dx.value.toSlice()),
         .mdc = dx.mdc,
         .severity = @tagName(dx.severity),
         .drg_impact = @tagName(dx.drg_impact),
         .poa_error = @tagName(dx.poa_error_code_flag),
-        .flags = try flags_list.toOwnedSlice(allocator),
+        .flags = try flags_list.toOwnedSlice(arena),
     };
 }
 
-fn mapProcedureOutput(allocator: std.mem.Allocator, proc: models.ProcedureCode) !ProcedureOutput {
+fn mapProcedureOutput(arena: std.mem.Allocator, proc: models.ProcedureCode) !ProcedureOutput {
     var flags_list: std.ArrayListUnmanaged([]const u8) = .empty;
-    defer flags_list.deinit(allocator);
     inline for (std.meta.fields(models.CodeFlag)) |f| {
         if (proc.is(@enumFromInt(f.value))) {
-            try flags_list.append(allocator, @tagName(@as(models.CodeFlag, @enumFromInt(f.value))));
+            try flags_list.append(arena, @tagName(@as(models.CodeFlag, @enumFromInt(f.value))));
         }
     }
 
     return ProcedureOutput{
-        .code = try allocator.dupe(u8, proc.value.toSlice()),
+        .code = try arena.dupe(u8, proc.value.toSlice()),
         .is_or = proc.is_operating_room,
         .drg_impact = @tagName(proc.drg_impact),
-        .flags = try flags_list.toOwnedSlice(allocator),
+        .flags = try flags_list.toOwnedSlice(arena),
     };
 }
 
-pub fn processJson(allocator: std.mem.Allocator, grouper_chain: *const msdrg.GrouperChain, json_str: []const u8) ![]u8 {
+/// Process a claim as JSON and return a JSON result string.
+///
+/// Memory: The caller owns the returned slice and must free it with the
+/// same allocator passed as `root_allocator`. All intermediate allocations
+/// are scoped to an internal arena that is freed before return.
+pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdrg.GrouperChain, json_str: []const u8) ![]u8 {
+    // Arena for all intermediate allocations — freed in one shot.
+    // This prevents leaks on partial failure (e.g. mapDiagnosisOutput
+    // succeeds but the append after it fails).
+    var arena_instance = std.heap.ArenaAllocator.init(root_allocator);
+    defer arena_instance.deinit();
+    const arena = arena_instance.allocator();
+
     // 1. Parse JSON
-    const parsed = try std.json.parseFromSlice(InputClaim, allocator, json_str, .{ .ignore_unknown_fields = true });
-    defer parsed.deinit();
+    const parsed = try std.json.parseFromSlice(InputClaim, arena, json_str, .{ .ignore_unknown_fields = true });
     const input = parsed.value;
 
     // 2. Get pre-built Link for requested version (thread-safe, no allocation)
-    // The Link struct is returned by value - it's small and only contains pointers
-    // to the pre-allocated chain objects. Do NOT deinit - we don't own the underlying data.
     const link = try grouper_chain.getLink(input.version);
 
-    // 3. Setup Processing Data
-    var data = models.ProcessingData.init(allocator);
+    // 3. Setup Processing Data (uses root_allocator since it outlives the arena)
+    var data = models.ProcessingData.init(root_allocator);
     defer data.deinit();
 
     data.age = input.age;
-    data.sex = @enumFromInt(input.sex);
-    data.discharge_status = @enumFromInt(input.discharge_status);
+    // Safely convert integers to enums — invalid values get defaults
+    data.sex = intToEnum(models.Sex, input.sex, .UNKNOWN);
+    data.discharge_status = intToEnum(models.DischargeStatus, input.discharge_status, .NONE);
 
     if (input.pdx) |p| {
         data.principal_dx = try models.DiagnosisCode.init(p.code, parsePoa(p.poa));
@@ -127,40 +140,34 @@ pub fn processJson(allocator: std.mem.Allocator, grouper_chain: *const msdrg.Gro
 
     for (input.sdx) |s| {
         const dx = try models.DiagnosisCode.init(s.code, parsePoa(s.poa));
-        try data.sdx_codes.append(allocator, dx);
+        try data.sdx_codes.append(root_allocator, dx);
     }
 
     for (input.procedures) |p| {
         const proc = try models.ProcedureCode.init(p.code);
-        try data.procedure_codes.append(allocator, proc);
+        try data.procedure_codes.append(root_allocator, proc);
     }
 
     // 4. Execute
-    const context = models.ProcessingContext.init(allocator, &data, .{});
-    // Note: context doesn't own data, but it holds a pointer to it.
-    // The result context will share the same data pointer usually, or wrap it.
-    // In our chain implementation, the context is passed by value but contains pointers.
-
+    const context = models.ProcessingContext.init(root_allocator, &data, .{});
     const result = try link.execute(context);
     var final_ctx = result.context;
     defer final_ctx.deinit();
 
-    // 5. Map Output
+    // 5. Map Output (arena-allocated — no individual frees needed)
     var sdx_out: std.ArrayListUnmanaged(DiagnosisOutput) = .empty;
-    defer sdx_out.deinit(allocator);
     for (final_ctx.data.sdx_codes.items) |dx| {
-        try sdx_out.append(allocator, try mapDiagnosisOutput(allocator, dx));
+        try sdx_out.append(arena, try mapDiagnosisOutput(arena, dx));
     }
 
     var proc_out: std.ArrayListUnmanaged(ProcedureOutput) = .empty;
-    defer proc_out.deinit(allocator);
     for (final_ctx.data.procedure_codes.items) |pr| {
-        try proc_out.append(allocator, try mapProcedureOutput(allocator, pr));
+        try proc_out.append(arena, try mapProcedureOutput(arena, pr));
     }
 
     var pdx_out: ?DiagnosisOutput = null;
     if (final_ctx.data.principal_dx) |pdx| {
-        pdx_out = try mapDiagnosisOutput(allocator, pdx);
+        pdx_out = try mapDiagnosisOutput(arena, pdx);
     }
 
     const output = OutputResult{
@@ -178,12 +185,16 @@ pub fn processJson(allocator: std.mem.Allocator, grouper_chain: *const msdrg.Gro
         .proc_output = proc_out.items,
     };
 
-    // 6. Stringify
-    var out: std.Io.Writer.Allocating = .init(allocator);
+    // 6. Stringify (arena for the writer buffer, then copy to root_allocator)
+    var out: std.Io.Writer.Allocating = .init(arena);
     var write_stream: std.json.Stringify = .{
         .writer = &out.writer,
         .options = .{ .whitespace = .minified },
     };
     try write_stream.write(output);
-    return try out.toOwnedSlice();
+
+    // Copy the final JSON string out of the arena so it survives arena free
+    const json_bytes = try out.toOwnedSlice();
+    const owned = try root_allocator.dupe(u8, json_bytes);
+    return owned;
 }

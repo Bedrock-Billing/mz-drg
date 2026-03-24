@@ -11,20 +11,21 @@ const json_api = @import("json_api.zig");
 // safely shared across multiple threads. The following functions are thread-safe
 // and can be called concurrently without external locking:
 //   - msdrg_group_json()
+//   - msdrg_group()
 //
-// The msdrg_version_create/msdrg_group API is also thread-safe, but each thread
-// should create its own MsdrgVersion and MsdrgInput instances.
+// The msdrg_version_create/msdrg_input_create API are also thread-safe, but each
+// thread should create its own MsdrgVersion and MsdrgInput instances.
 //
 // NOT thread-safe (call only from main thread):
 //   - msdrg_context_init()
 //   - msdrg_context_free()
 
 // --- Allocator ---
-// Use C allocator (malloc/free) for shared library to avoid GPA issues and integrate better with system.
-const c_allocator = std.heap.c_allocator;
-fn getAllocator() std.mem.Allocator {
-    return c_allocator;
-}
+// Use C allocator (malloc/free) for shared library:
+// - C callers expect malloc/free semantics
+// - Mixing allocators across FFI boundaries causes crashes
+// - malloc is thread-safe on all major platforms
+const allocator = std.heap.c_allocator;
 
 // --- Opaque Types for C ---
 pub const MsdrgContext = opaque {};
@@ -35,7 +36,8 @@ pub const MsdrgResult = opaque {};
 // --- Context Management ---
 
 export fn msdrg_context_init(data_dir: [*c]const u8) ?*MsdrgContext {
-    const allocator = getAllocator();
+    if (data_dir == null) return null;
+
     const dir_slice = std.mem.span(data_dir);
 
     const ctx = allocator.create(msdrg.GrouperChain) catch return null;
@@ -55,7 +57,6 @@ export fn msdrg_context_init(data_dir: [*c]const u8) ?*MsdrgContext {
 }
 
 export fn msdrg_context_free(ctx: ?*MsdrgContext) void {
-    const allocator = getAllocator();
     if (ctx) |c| {
         const self = @as(*msdrg.GrouperChain, @ptrCast(@alignCast(c)));
         self.deinit();
@@ -66,7 +67,6 @@ export fn msdrg_context_free(ctx: ?*MsdrgContext) void {
 // --- Version Management ---
 
 export fn msdrg_version_create(ctx: *MsdrgContext, version: i32) ?*MsdrgVersion {
-    const allocator = getAllocator();
     const self = @as(*msdrg.GrouperChain, @ptrCast(@alignCast(ctx)));
 
     const link_ptr = allocator.create(chain.Link) catch return null;
@@ -79,7 +79,6 @@ export fn msdrg_version_create(ctx: *MsdrgContext, version: i32) ?*MsdrgVersion 
 }
 
 export fn msdrg_version_free(ver: ?*MsdrgVersion) void {
-    const allocator = getAllocator();
     if (ver) |v| {
         const link = @as(*chain.Link, @ptrCast(@alignCast(v)));
         link.deinit(allocator);
@@ -94,14 +93,12 @@ const InputWrapper = struct {
 };
 
 export fn msdrg_input_create() ?*MsdrgInput {
-    const allocator = getAllocator();
     const wrapper = allocator.create(InputWrapper) catch return null;
     wrapper.data = models.ProcessingData.init(allocator);
     return @ptrCast(wrapper);
 }
 
 export fn msdrg_input_free(input: ?*MsdrgInput) void {
-    const allocator = getAllocator();
     if (input) |i| {
         const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(i)));
         wrapper.data.deinit();
@@ -110,13 +107,12 @@ export fn msdrg_input_free(input: ?*MsdrgInput) void {
 }
 
 export fn msdrg_input_set_pdx(input: *MsdrgInput, code: [*c]const u8, poa: u8) bool {
-    const allocator = getAllocator();
+    if (code == null) return false;
     const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
     const code_slice = std.mem.span(code);
 
     const dx = models.DiagnosisCode.init(code_slice, poa) catch return false;
 
-    // If there was already a PDX, deinit it (though init starts null)
     if (wrapper.data.principal_dx) |*old| {
         old.deinit(allocator);
     }
@@ -125,7 +121,7 @@ export fn msdrg_input_set_pdx(input: *MsdrgInput, code: [*c]const u8, poa: u8) b
 }
 
 export fn msdrg_input_set_admit_dx(input: *MsdrgInput, code: [*c]const u8, poa: u8) bool {
-    const allocator = getAllocator();
+    if (code == null) return false;
     const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
     const code_slice = std.mem.span(code);
 
@@ -139,7 +135,7 @@ export fn msdrg_input_set_admit_dx(input: *MsdrgInput, code: [*c]const u8, poa: 
 }
 
 export fn msdrg_input_add_sdx(input: *MsdrgInput, code: [*c]const u8, poa: u8) bool {
-    const allocator = getAllocator();
+    if (code == null) return false;
     const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
     const code_slice = std.mem.span(code);
 
@@ -149,7 +145,7 @@ export fn msdrg_input_add_sdx(input: *MsdrgInput, code: [*c]const u8, poa: u8) b
 }
 
 export fn msdrg_input_add_procedure(input: *MsdrgInput, code: [*c]const u8) bool {
-    const allocator = getAllocator();
+    if (code == null) return false;
     const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
     const code_slice = std.mem.span(code);
 
@@ -162,12 +158,23 @@ export fn msdrg_input_set_demographics(input: *MsdrgInput, age: i32, sex: i32, d
     const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
     wrapper.data.age = age;
 
-    // Map integers to enums.
-    // Sex: 0=MALE, 1=FEMALE, 2=UNKNOWN (Assuming 0/1/2 mapping, need to verify models.zig)
-    wrapper.data.sex = @enumFromInt(sex);
+    // Safely convert integers to enums — invalid values get a default
+    wrapper.data.sex = intToSex(sex);
+    wrapper.data.discharge_status = intToDischargeStatus(discharge_status);
+}
 
-    // DischargeStatus: enum(i32)
-    wrapper.data.discharge_status = @enumFromInt(discharge_status);
+fn intToSex(v: i32) models.Sex {
+    inline for (std.meta.fields(models.Sex)) |f| {
+        if (v == f.value) return @enumFromInt(f.value);
+    }
+    return .UNKNOWN;
+}
+
+fn intToDischargeStatus(v: i32) models.DischargeStatus {
+    inline for (std.meta.fields(models.DischargeStatus)) |f| {
+        if (v == f.value) return @enumFromInt(f.value);
+    }
+    return .NONE;
 }
 
 // --- Execution ---
@@ -177,17 +184,12 @@ const ResultWrapper = struct {
 };
 
 export fn msdrg_group(ver: *MsdrgVersion, input: *MsdrgInput) ?*MsdrgResult {
-    const allocator = getAllocator();
     const link = @as(*chain.Link, @ptrCast(@alignCast(ver)));
     const input_wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
 
-    // Create a new context for this run
     const context = models.ProcessingContext.init(allocator, &input_wrapper.data, .{});
 
     const result = link.execute(context) catch return null;
-
-    // The result contains the context which contains the data.
-    // We need to return something that holds the result context.
 
     const res_wrapper = allocator.create(ResultWrapper) catch return null;
     res_wrapper.context = result.context;
@@ -198,7 +200,6 @@ export fn msdrg_group(ver: *MsdrgVersion, input: *MsdrgInput) ?*MsdrgResult {
 // --- Result Access ---
 
 export fn msdrg_result_free(res: ?*MsdrgResult) void {
-    const allocator = getAllocator();
     if (res) |r| {
         const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(r)));
         wrapper.context.deinit();
@@ -232,25 +233,20 @@ export fn msdrg_result_get_return_code(res: *MsdrgResult) i32 {
 }
 
 // --- Python Helper: JSON Output ---
-// It's often easier to just get a JSON string back in Python than calling 50 getters.
 
 export fn msdrg_result_to_json(res: *MsdrgResult) [*c]const u8 {
-    const allocator = getAllocator();
     const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
     const data = wrapper.context.data;
 
-    const json_str = std.fmt.allocPrint(allocator, "{{\"initial_drg\":{?},\"final_drg\":{?},\"initial_mdc\":{?},\"final_mdc\":{?},\"return_code\":\"{s}\"}}\x00", .{ data.initial_result.drg, data.final_result.drg, data.initial_result.mdc, data.final_result.mdc, @tagName(data.final_result.return_code) }) catch return null;
+    // Allocate with null terminator
+    const json_str = std.fmt.allocPrintSentinel(allocator, "{{\"initial_drg\":{?},\"final_drg\":{?},\"initial_mdc\":{?},\"final_mdc\":{?},\"return_code\":\"{s}\"}}", .{ data.initial_result.drg, data.final_result.drg, data.initial_result.mdc, data.final_result.mdc, @tagName(data.final_result.return_code) }, 0) catch return null;
 
     return json_str.ptr;
 }
 
 export fn msdrg_string_free(s: [*c]const u8) void {
-    const allocator = getAllocator();
     if (s) |ptr| {
         const len = std.mem.len(ptr);
-        // We assume the string was allocated with a null terminator included in the allocation.
-        // std.mem.len returns the length excluding the null terminator.
-        // So we need to free len + 1 bytes.
         const slice = ptr[0 .. len + 1];
         allocator.free(slice);
     }
@@ -259,18 +255,80 @@ export fn msdrg_string_free(s: [*c]const u8) void {
 // --- One-Shot JSON API ---
 
 export fn msdrg_group_json(ctx: *MsdrgContext, json_str: [*c]const u8) [*c]const u8 {
-    const allocator = getAllocator();
+    if (json_str == null) return null;
+
     const chain_ptr = @as(*msdrg.GrouperChain, @ptrCast(@alignCast(ctx)));
     const json_slice = std.mem.span(json_str);
 
+    // Use allocPrintZ to allocate with null terminator in one shot
     const result_json = json_api.processJson(allocator, chain_ptr, json_slice) catch return null;
+    defer allocator.free(result_json);
 
-    // Let's just append null here.
-    const terminated = allocator.realloc(result_json, result_json.len + 1) catch {
-        allocator.free(result_json);
-        return null;
-    };
-    terminated[result_json.len] = 0;
+    // Allocate null-terminated copy
+    const terminated = allocator.allocSentinel(u8, result_json.len, 0) catch return null;
+    @memcpy(terminated, result_json);
 
     return terminated.ptr;
+}
+
+// --- Tests ---
+
+test "msdrg_context_init null data_dir" {
+    const result = msdrg_context_init(null);
+    try std.testing.expectEqual(@as(?*MsdrgContext, null), result);
+}
+
+test "msdrg_context_free null context" {
+    // Should not crash
+    msdrg_context_free(null);
+}
+
+test "msdrg_input_create and free" {
+    const input = msdrg_input_create() orelse return error.FailedToCreate;
+    msdrg_input_free(input);
+}
+
+test "msdrg_input_free null" {
+    msdrg_input_free(null);
+}
+
+test "msdrg_input_set_pdx null code" {
+    const input = msdrg_input_create() orelse return error.FailedToCreate;
+    defer msdrg_input_free(input);
+
+    const result = msdrg_input_set_pdx(input, null, 'Y');
+    try std.testing.expect(!result);
+}
+
+test "msdrg_input_add_sdx null code" {
+    const input = msdrg_input_create() orelse return error.FailedToCreate;
+    defer msdrg_input_free(input);
+
+    const result = msdrg_input_add_sdx(input, null, 'Y');
+    try std.testing.expect(!result);
+}
+
+test "msdrg_input_add_procedure null code" {
+    const input = msdrg_input_create() orelse return error.FailedToCreate;
+    defer msdrg_input_free(input);
+
+    const result = msdrg_input_add_procedure(input, null);
+    try std.testing.expect(!result);
+}
+
+test "msdrg_input_set_demographics clamps invalid sex" {
+    const input = msdrg_input_create() orelse return error.FailedToCreate;
+    defer msdrg_input_free(input);
+
+    // sex=99 is out of range — should not crash
+    msdrg_input_set_demographics(input, 65, 99, 1);
+}
+
+test "msdrg_group_json null json_str" {
+    // Create a minimal context — this test needs data files so skip if not available
+    const ctx = msdrg_context_init("data/bin") orelse return error.SkipZigTest;
+    defer msdrg_context_free(ctx);
+
+    const result = msdrg_group_json(ctx, null);
+    try std.testing.expectEqual(@as([*c]const u8, null), result);
 }
