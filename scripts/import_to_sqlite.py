@@ -2,7 +2,6 @@ import sqlite3
 import csv
 import os
 import glob
-import json
 
 # Define paths relative to this script
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

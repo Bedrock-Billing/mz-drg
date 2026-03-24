@@ -3,6 +3,7 @@ include README.md
 include pyproject.toml
 include setup.py
 recursive-include msdrg *.py
+include msdrg/py.typed
 recursive-include msdrg/data *.bin
 recursive-include zig_src *.zig build.zig
 recursive-include scripts *.py *.sh

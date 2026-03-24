@@ -23,6 +23,9 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 keywords = ["drg", "ms-drg", "grouper", "healthcare", "medicare"]
+dependencies = [
+    "ruff>=0.15.7",
+]
 
 [project.urls]
 Homepage = "https://github.com/Bedrock-Billing/mz-drg"

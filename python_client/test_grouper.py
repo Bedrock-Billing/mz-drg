@@ -1,5 +1,4 @@
 import os
-import sys
 from msdrg import MsdrgGrouper, create_claim
 
 def main():

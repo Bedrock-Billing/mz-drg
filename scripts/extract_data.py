@@ -5,7 +5,7 @@ import os
 import csv
 import sys
 import json
-# from java.lang.reflect import Modifier
+from java.lang.reflect import Modifier
 
 # Define paths
 JAR_DIR = os.path.join(os.getcwd(), "jars")
@@ -31,7 +31,6 @@ try:
 except OSError:
     print("JVM already started")
 
-from java.lang.reflect import Modifier
 
 # Import classes
 try:
@@ -84,7 +83,8 @@ def serialize_value(value):
                     val = f.get(value)
                     # Avoid infinite recursion if any
                     fields[str(f.getName())] = serialize_value(val)
-                except:
+                except Exception as e:
+                    print(f"Error accessing field {f.getName()}: {e}")
                     pass
             current_cls = current_cls.getSuperclass()
         return fields

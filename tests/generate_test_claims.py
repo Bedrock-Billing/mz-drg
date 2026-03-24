@@ -1,7 +1,6 @@
 import csv
 import random
 import json
-import os
 
 # Configuration
 NUM_CLAIMS = 50_000

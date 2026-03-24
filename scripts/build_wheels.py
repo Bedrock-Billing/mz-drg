@@ -28,7 +28,6 @@ Cross-compilation targets (all buildable from a single Linux machine):
 """
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
@@ -140,6 +139,11 @@ def build_wheel(platform_tag: str, lib_path: Path) -> Path:
             arcname = str(py_file.relative_to(ROOT_DIR))
             whl.write(py_file, arcname)
 
+        # Add py.typed marker (PEP 561)
+        py_typed = MSDRG_PKG_DIR / "py.typed"
+        if py_typed.exists():
+            whl.write(py_typed, "msdrg/py.typed")
+
         # Add the shared library
         lib_arcname = f"msdrg/_lib/{lib_path.name}"
         whl.write(lib_path, lib_arcname)
@@ -228,9 +232,9 @@ def try_auditwheel(wheel_path: Path, platform_tag: str) -> None:
         # auditwheel creates a new wheel with the proper name
         # Remove the original unrepaired wheel
         wheel_path.unlink()
-        print(f"  Repaired with auditwheel ✓")
+        print("  Repaired with auditwheel ✓")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print(f"  auditwheel not available or failed (wheel is still usable)")
+        print("  auditwheel not available or failed (wheel is still usable)")
 
 
 def try_delocate(wheel_path: Path, platform_tag: str) -> None:
@@ -243,9 +247,9 @@ def try_delocate(wheel_path: Path, platform_tag: str) -> None:
             ["delocate-wheel", "-w", str(DIST_DIR), str(wheel_path)],
             stdout=subprocess.DEVNULL,
         )
-        print(f"  Repaired with delocate ✓")
+        print("  Repaired with delocate ✓")
     except (subprocess.CalledProcessError, FileNotFoundError):
-        print(f"  delocate not available or failed (wheel is still usable)")
+        print("  delocate not available or failed (wheel is still usable)")
 
 
 def build_target(target_name: str, optimize: str = "ReleaseFast"):
@@ -259,16 +263,16 @@ def build_target(target_name: str, optimize: str = "ReleaseFast"):
     print(f"{'=' * 60}")
 
     # 1. Cross-compile
-    print(f"\n[1/3] Cross-compiling Zig library...")
+    print("\n[1/3] Cross-compiling Zig library...")
     build_zig_lib(zig_target, optimize)
 
     # 2. Find the built library
-    print(f"[2/3] Locating built library...")
+    print("[2/3] Locating built library...")
     lib_path = find_built_lib(zig_target)
     print(f"  Found: {lib_path}")
 
     # 3. Build the wheel
-    print(f"[3/3] Building wheel...")
+    print("[3/3] Building wheel...")
     wheel_path = build_wheel(platform_tag, lib_path)
     size_mb = wheel_path.stat().st_size / (1024 * 1024)
     print(f"  Created: {wheel_path.name} ({size_mb:.1f} MB)")
@@ -333,8 +337,8 @@ def main():
     for w in built:
         size_mb = w.stat().st_size / (1024 * 1024)
         print(f"  {w.name}  ({size_mb:.1f} MB)")
-    print(f"\nTo install locally: pip install dist/<wheel>.whl")
-    print(f"To upload to PyPI:  twine upload dist/*.whl")
+    print("\nTo install locally: pip install dist/<wheel>.whl")
+    print("To upload to PyPI:  twine upload dist/*.whl")
 
 
 if __name__ == "__main__":
