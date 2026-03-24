@@ -271,8 +271,12 @@ class MsdrgGrouper:
             descriptions, and per-code detail.
 
         Raises:
-            RuntimeError: If the native grouper returns null (unexpected).
+            RuntimeError: If the grouper has been closed, or if the native
+                          grouper returns null (unexpected).
         """
+        if not self.ctx:
+            raise RuntimeError("MsdrgGrouper has been closed. Create a new instance.")
+
         json_bytes = json.dumps(claim_data).encode("utf-8")
 
         result_ptr = self.lib.msdrg_group_json(self.ctx, json_bytes)
