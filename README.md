@@ -34,9 +34,6 @@ mz-drg is not a black-box reimplementation. The grouping logic — preprocessing
 ```bash
 pip install msdrg
 ```
-
-> **Requires Zig 0.16+** at build time. Install from [ziglang.org/download](https://ziglang.org/download/) or set the `ZIG` environment variable to point to your zig binary.
-
 ### Use
 
 ```python
@@ -111,7 +108,7 @@ The `hospital_status` field controls how Hospital-Acquired Condition (HAC) proce
 
 | Value | Behavior |
 |-------|----------|
-| `"NOT_EXEMPT"` | Standard HAC processing. Codes with invalid POA on HAC-eligible diagnoses may mark the claim ungroupable. Default. |
+| `"NOT_EXEMPT"` | Standard HAC processing. Codes with invalid POA on HAC-eligible diagnoses may mark the claim ungroupable. Claims meeting HAC criteria may have DRG assignment impacted. Default. |
 | `"EXEMPT"` | Hospital is exempt from POA reporting. All HACs are set to `HAC_NOT_APPLICABLE_EXEMPT` with POA error `HOSPITAL_EXEMPT`. No ungroupable conditions from HAC/POA. |
 | `"UNKNOWN"` | Stricter POA validation. Multiple codes with non-Y/W POA, or individual codes with N/U or invalid POA, trigger specific ungroupable return codes. |
 
