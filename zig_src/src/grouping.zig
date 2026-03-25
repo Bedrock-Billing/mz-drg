@@ -363,6 +363,27 @@ pub const MsdrgSeverityProcessor = struct {
         var max_sev = models.Severity.NONE;
 
         for (sdx_codes) |*sdx| {
+            // Skip HAC codes — Java MsdrgFormulaEvaluation filters these out:
+            //   nonHacCodes = sdxCodes.stream().filter(code -> !MsdrgHacProcessor.isHac(code, hospitalStatus))
+            // After HAC processing, codes with HAC_CRITERIA_MET should not contribute to severity.
+            var is_hac = false;
+            for (sdx.hacs.items) |hac| {
+                if (hac.hac_status == .HAC_CRITERIA_MET) {
+                    is_hac = true;
+                    break;
+                }
+            }
+            // Also check hacs_flags (post-evaluation list)
+            if (!is_hac) {
+                for (sdx.hacs_flags.items) |hac| {
+                    if (hac.hac_status == .HAC_CRITERIA_MET and hac.hac_number != 0) {
+                        is_hac = true;
+                        break;
+                    }
+                }
+            }
+            if (is_hac) continue;
+
             // Check suppression
             var suppressed = false;
 

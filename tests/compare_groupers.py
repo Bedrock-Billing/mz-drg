@@ -287,7 +287,8 @@ def run_zig_grouper(claim_data):
     return {
         "drg": res['final_drg'],
         "mdc": res['final_mdc'],
-        "return_code": res['return_code']
+        "return_code": res['return_code'],
+        "full_res": res
     }
 
 def compare(java_client, claim, debug=False):    
@@ -306,11 +307,16 @@ def compare(java_client, claim, debug=False):
         
     status = "ERROR"
     if java_res and zig_res:
+        if zig_res["drg"] is None:
+            print(claim)
+            print(f"Zig DRG is None: {zig_res}")
+            print(f"Java DRG: {java_res}")
         if int(java_res[0]) == int(zig_res['drg']) and int(java_res[1]) == int(zig_res['mdc']):
             status = "MATCH"
         else:
             status = "MISMATCH"
-            print(f"MISMATCH: Java={java_res} Zig={zig_res}")
+            print(f"MISMATCH: Java={java_res} Zig={zig_res}, Claim={claim}")
+            raise Exception(f"MISMATCH: Java={java_res} Zig={zig_res}, Claim={claim}")
     
     return status, java_res, zig_res, claim
 
@@ -352,7 +358,16 @@ def run_java_grouper(claim_data, debug=False):
     from java.util import ArrayList
     sdx_list = ArrayList()
     for sdx_c in claim_data['sdx']:
-        sdx_input = MsdrgInputDxCode(sdx_c['code'], GfcPoa.Y)
+        poa_val = None
+        if sdx_c['poa'] == "Y":
+            poa_val = GfcPoa.Y
+        elif sdx_c['poa'] == "N":
+            poa_val = GfcPoa.N
+        elif sdx_c['poa'] == "U":
+            poa_val = GfcPoa.U
+        elif sdx_c['poa'] == "W":
+            poa_val = GfcPoa.W
+        sdx_input = MsdrgInputDxCode(sdx_c['code'], poa_val)
         sdx_list.add(MsdrgDiagnosisCode(sdx_input))
         
     # Procedures
@@ -412,11 +427,11 @@ def run_java_grouper(claim_data, debug=False):
     final_data = final_context.getProcessingData()
     final_res = final_data.getFinalResult()
     
-    return {
-        "drg": final_res.getDrg(),
-        "mdc": final_res.getMdc(),
-        "return_code": str(final_res.getReturnCode())
-    }
+    return (
+        final_res.getDrg(),
+        final_res.getMdc(),
+        str(final_res.getReturnCode())
+    )
 
 def benchmark_zig(claims):
     ctx = msdrg.MsdrgGrouper(LIB_PATH, DATA_DIR)

@@ -44,6 +44,7 @@ def generate_claims():
 
         pdx_code = random.choice(dx_codes)
         sdx_codes = random.sample(dx_codes, num_sdx)
+        poa_codes = [random.choice(["Y", "N"]) for _ in range(num_sdx)]
         selected_procs = random.sample(proc_codes, num_proc)
 
         claim = {
@@ -52,8 +53,8 @@ def generate_claims():
             'age': age,
             'sex': sex,
             'discharge_status': discharge_status,
-            'pdx': {'code': pdx_code},
-            'sdx': [{'code': c} for c in sdx_codes],
+            'pdx': {'code': pdx_code, "poa": "Y"},
+            'sdx': [{'code': c, "poa": poa_codes[i]} for i, c in enumerate(sdx_codes)],
             'procedures': [{'code': c} for c in selected_procs]
         }
         claims.append(claim)
