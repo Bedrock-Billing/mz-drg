@@ -87,6 +87,7 @@ The `group()` method accepts a dictionary:
     "age": 65,                   # Patient age in years
     "sex": 0,                    # 0=Male, 1=Female, 2=Unknown
     "discharge_status": 1,       # 1=Home/Self Care, 20=Died
+    "hospital_status": "NOT_EXEMPT",  # "NOT_EXEMPT" (default), "EXEMPT", or "UNKNOWN"
     "pdx": {                     # Principal diagnosis (required)
         "code": "I5020",
         "poa": "Y"               # Present on Admission: Y/N/U/W (optional)
@@ -103,6 +104,18 @@ The `group()` method accepts a dictionary:
     ]
 }
 ```
+
+### Hospital status
+
+The `hospital_status` field controls how Hospital-Acquired Condition (HAC) processing is applied, per CMS rules:
+
+| Value | Behavior |
+|-------|----------|
+| `"NOT_EXEMPT"` | Standard HAC processing. Codes with invalid POA on HAC-eligible diagnoses may mark the claim ungroupable. Default. |
+| `"EXEMPT"` | Hospital is exempt from POA reporting. All HACs are set to `HAC_NOT_APPLICABLE_EXEMPT` with POA error `HOSPITAL_EXEMPT`. No ungroupable conditions from HAC/POA. |
+| `"UNKNOWN"` | Stricter POA validation. Multiple codes with non-Y/W POA, or individual codes with N/U or invalid POA, trigger specific ungroupable return codes. |
+
+This is a per-request setting — each call to `group()` can use a different `hospital_status` without reconfiguring the grouper.
 
 ## Output format
 
@@ -161,10 +174,17 @@ Pass the version number in the claim's `version` field.
 │  Chain of Links:                                │
 │  ┌──────────────────────────────────────────┐   │
 │  │ Preprocess  →  Exclusions  →  Grouping   │   │
-│  │    ↓              ↓              ↓       │   │
-│  │ Attributes    Cluster Map    Formulas    │   │
-│  │    ↓              ↓              ↓       │   │
-│  │ Diagnosis     Marking       Final DRG    │   │
+│  │    ↓              ↓           (initial)  │   │
+│  │ Attributes    Cluster Map        ↓       │   │
+│  │                              Marking     │   │
+│  │                                 ↓        │   │
+│  │              HAC Processing ◄────────    │   │
+│  │              (EXEMPT/NON_EXEMPT/UNKNOWN) │   │
+│  │                                 ↓        │   │
+│  │                           Grouping       │   │
+│  │                           (final)        │   │
+│  │                                 ↓        │   │
+│  │                           Final DRG      │   │
 │  └──────────────────────────────────────────┘   │
 │       │                                         │
 │       ▼                                         │
@@ -199,11 +219,11 @@ This compiles the Zig shared library and bundles the data files into the Python 
 ### Run tests
 
 ```bash
-# Zig unit tests (27 tests)
+# Zig unit tests (27+ tests)
 cd zig_src && zig build test
 
-# Python smoke test
-python -c "import msdrg; print(msdrg.MsdrgGrouper().group({'version': 431, 'age': 65, 'sex': 0, 'discharge_status': 1, 'pdx': {'code': 'I5020'}, 'sdx': [], 'procedures': []}))"
+# Python tests
+python -m pytest tests/test_grouper.py
 ```
 
 ### Data pipeline
