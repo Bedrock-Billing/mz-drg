@@ -122,6 +122,7 @@ pub const Hac = struct {
 pub const HospitalStatusOptionFlag = enum {
     EXEMPT,
     NOT_EXEMPT,
+    UNKNOWN,
 };
 
 pub const RuntimeOptions = struct {
@@ -136,7 +137,10 @@ pub const GrouperReturnCode = enum {
     INVALID_DISCHARGE_STATUS,
     DX_CANNOT_BE_PDX,
     UNGROUPABLE,
-    // Add others as needed
+    HAC_MISSING_ONE_POA,
+    HAC_STATUS_INVALID_MULT_HACS_POA_NOT_Y_W,
+    HAC_STATUS_INVALID_POA_N_OR_U,
+    HAC_STATUS_INVALID_POA_INVALID_OR_1,
 };
 
 pub const CodeFlag = enum {

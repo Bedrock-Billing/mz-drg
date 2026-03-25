@@ -408,3 +408,76 @@ class TestCApiEdgeCases:
             )
         gc.collect()
         # If we get here without OOM or crash, the arena is cleaning up correctly
+
+
+# ---------------------------------------------------------------------------
+# Hospital status (EXEMPT / NOT_EXEMPT / UNKNOWN)
+# ---------------------------------------------------------------------------
+
+
+class TestHospitalStatus:
+    """Tests for hospital POA reporting status affecting HAC processing."""
+
+    def _claim_with_hac_sdx(self, sdx_poa: str, hospital_status: str | None = None):
+        """Build a claim with T80211A (HAC 7 code)."""
+        claim = {
+            "version": 431,
+            "age": 65,
+            "sex": 0,
+            "discharge_status": 1,
+            "pdx": {"code": "I5020"},
+            "sdx": [{"code": "T80211A", "poa": sdx_poa}],
+        }
+        if hospital_status:
+            claim["hospital_status"] = hospital_status
+        return claim
+
+    def test_exempt_skips_hac_processing(self, grouper: MsdrgGrouper):
+        """EXEMPT: HACs should be set to HAC_NOT_APPLICABLE_EXEMPT,
+        POA error should be HOSPITAL_EXEMPT."""
+        result = grouper.group(self._claim_with_hac_sdx("N", "EXEMPT"))
+        assert result["return_code"] == "OK"
+        sdx = result["sdx_output"][0]
+        assert sdx["poa_error"] == "HOSPITAL_EXEMPT"
+
+    def test_not_exempt_default_behavior(self, grouper: MsdrgGrouper):
+        """NOT_EXEMPT (default): normal HAC processing applies."""
+        result = grouper.group(self._claim_with_hac_sdx("N"))
+        assert result["return_code"] == "OK"
+        sdx = result["sdx_output"][0]
+        assert sdx["poa_error"] == "POA_RECOGNIZED_NOT_POA"
+
+    def test_not_exempt_explicit(self, grouper: MsdrgGrouper):
+        """NOT_EXEMPT explicit: same as default."""
+        result = grouper.group(self._claim_with_hac_sdx("N", "NOT_EXEMPT"))
+        assert result["return_code"] == "OK"
+        sdx = result["sdx_output"][0]
+        assert sdx["poa_error"] == "POA_RECOGNIZED_NOT_POA"
+
+    def test_unknown_valid_poa(self, grouper: MsdrgGrouper):
+        """UNKNOWN with POA=Y: should be OK (Y is valid in UNKNOWN mode)."""
+        result = grouper.group(self._claim_with_hac_sdx("Y", "UNKNOWN"))
+        assert result["return_code"] == "OK"
+
+    def test_unknown_invalid_poa_returns_specific_code(self, grouper: MsdrgGrouper):
+        """UNKNOWN with POA=N: should return specific HAC return code."""
+        result = grouper.group(self._claim_with_hac_sdx("N", "UNKNOWN"))
+        assert result["return_code"] in (
+            "HAC_STATUS_INVALID_POA_N_OR_U",
+            "UNGROUPABLE",
+        )
+
+    def test_exempt_does_not_mark_ungroupable(self, grouper: MsdrgGrouper):
+        """EXEMPT with invalid POA should NOT mark ungroupable."""
+        result = grouper.group(self._claim_with_hac_sdx(" ", "EXEMPT"))
+        assert result["return_code"] == "OK"
+
+    def test_hospital_status_per_request(self, grouper: MsdrgGrouper):
+        """Different hospital_status on consecutive calls should not interfere."""
+        r1 = grouper.group(self._claim_with_hac_sdx("N", "EXEMPT"))
+        r2 = grouper.group(self._claim_with_hac_sdx("N", "NOT_EXEMPT"))
+        r3 = grouper.group(self._claim_with_hac_sdx("N", "EXEMPT"))
+
+        assert r1["sdx_output"][0]["poa_error"] == "HOSPITAL_EXEMPT"
+        assert r2["sdx_output"][0]["poa_error"] == "POA_RECOGNIZED_NOT_POA"
+        assert r3["sdx_output"][0]["poa_error"] == "HOSPITAL_EXEMPT"

@@ -319,9 +319,34 @@ pub const MsdrgHacProcessor = struct {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
         const data = context.data;
         const allocator = context.allocator;
+        const hospital_status = context.runtime.poa_reporting_exempt;
 
-        // Process HACs
-        try self.processHospitalAcquiredCondition(data, allocator);
+        if (hospital_status == .EXEMPT) {
+            // Hospital is exempt from POA reporting — skip HAC processing entirely
+            for (data.sdx_codes.items) |*sdx| {
+                if (sdx.hacs.items.len == 0) continue;
+                sdx.poa_error_code_flag = .HOSPITAL_EXEMPT;
+                for (sdx.hacs.items) |*hac| {
+                    hac.hac_status = .HAC_NOT_APPLICABLE_EXEMPT;
+                }
+            }
+            try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
+            return chain.LinkResult{
+                .context = context,
+                .continue_processing = true,
+            };
+        }
+
+        // NON_EXEMPT or UNKNOWN — process HACs
+        try self.processHospitalAcquiredCondition(data, hospital_status, allocator);
+
+        // If already marked ungroupable by a prior step, stop the chain
+        if (data.final_result.return_code != .OK) {
+            return chain.LinkResult{
+                .context = context,
+                .continue_processing = false,
+            };
+        }
 
         return chain.LinkResult{
             .context = context,
@@ -329,7 +354,7 @@ pub const MsdrgHacProcessor = struct {
         };
     }
 
-    fn processHospitalAcquiredCondition(self: *const MsdrgHacProcessor, data: *models.ProcessingData, allocator: std.mem.Allocator) !void {
+    fn processHospitalAcquiredCondition(self: *const MsdrgHacProcessor, data: *models.ProcessingData, hospital_status: models.HospitalStatusOptionFlag, allocator: std.mem.Allocator) !void {
         var codes_with_hacs = std.AutoHashMap(i32, std.ArrayList(*models.DiagnosisCode)).init(allocator);
         defer {
             var it = codes_with_hacs.valueIterator();
@@ -434,41 +459,80 @@ pub const MsdrgHacProcessor = struct {
             }
         }
 
-        // Mark Ungroupable logic
-        var mark_ungroupable = false;
-        // Assuming NON_EXEMPT for now
-        if (codes_with_hacs.count() > 0) {
-            var it = codes_with_hacs.iterator();
-            while (it.next()) |entry| {
-                const hac_number = entry.key_ptr.*;
-                const dx_codes = entry.value_ptr.items;
+        // Mark Ungroupable logic — branches by hospital status
+        if (hospital_status == .NOT_EXEMPT) {
+            // NON_EXEMPT: mark ungroupable if any HAC-eligible code has invalid POA
+            var mark_ungroupable = false;
 
-                if (hac_number == 6) {
-                    if (code_on_hac6_but_not_show_list == null) continue;
+            if (codes_with_hacs.count() > 0) {
+                var it = codes_with_hacs.iterator();
+                while (it.next()) |entry| {
+                    const hac_number = entry.key_ptr.*;
+                    const dx_codes = entry.value_ptr.items;
+
+                    if (hac_number == 6) {
+                        if (code_on_hac6_but_not_show_list == null) continue;
+                        for (dx_codes) |dx| {
+                            if (dx.poa == 'E' or dx.poa == ' ' or dx.poa == '1' or dx.poa == 0) {
+                                mark_ungroupable = true;
+                            }
+                        }
+                        continue;
+                    }
+
                     for (dx_codes) |dx| {
-                        if (dx.poa == 'E' or dx.poa == ' ' or dx.poa == '1' or dx.poa == 0) {
+                        const is_poa_invalid = (dx.poa == 'E' or dx.poa == ' ' or dx.poa == '1' or dx.poa == 0);
+                        if (is_poa_invalid) {
                             mark_ungroupable = true;
                         }
                     }
-                    continue;
-                }
-
-                for (dx_codes) |dx| {
-                    const is_poa_invalid = (dx.poa == 'E' or dx.poa == ' ' or dx.poa == '1' or dx.poa == 0);
-                    if (is_poa_invalid) {
+                    if (has_invalid_poa_on_claim) {
                         mark_ungroupable = true;
                     }
                 }
-                if (has_invalid_poa_on_claim) {
-                    mark_ungroupable = true;
+            }
+
+            if (mark_ungroupable) {
+                data.final_result.return_code = .HAC_MISSING_ONE_POA;
+                try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
+                return;
+            }
+        } else if (hospital_status == .UNKNOWN) {
+            // UNKNOWN: stricter POA validation per CMS rules
+            if (codes_with_hacs.count() > 0) {
+                for (data.sdx_codes.items) |*sdx| {
+                    if (sdx.hacs.items.len == 0) continue;
+                    for (sdx.hacs.items) |*hac| {
+                        if (hac.hac_status != .HAC_CRITERIA_MET) continue;
+
+                        // Count non-Y/W POA across ALL SDX codes on the claim
+                        var poa_counter: usize = 0;
+                        for (data.sdx_codes.items) |*dx| {
+                            if (dx.poa != 'Y' and dx.poa != 'W') {
+                                poa_counter += 1;
+                            }
+                        }
+                        if (poa_counter >= 2) {
+                            sdx.initial_severity_flag = .NEITHER;
+                            data.final_result.return_code = .HAC_STATUS_INVALID_MULT_HACS_POA_NOT_Y_W;
+                            try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
+                            return;
+                        }
+                        if (sdx.poa == 'N' or sdx.poa == 'U') {
+                            sdx.initial_severity_flag = .NEITHER;
+                            data.final_result.return_code = .HAC_STATUS_INVALID_POA_N_OR_U;
+                            try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
+                            return;
+                        }
+                        if (sdx.poa == 0 or sdx.poa == ' ' or sdx.poa == 'E' or sdx.poa == '1') {
+                            sdx.initial_severity_flag = .NEITHER;
+                            data.final_result.return_code = .HAC_STATUS_INVALID_POA_INVALID_OR_1;
+                            try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
+                            return;
+                        }
+                    }
                 }
             }
-        }
-
-        if (mark_ungroupable) {
-            data.final_result.return_code = .UNGROUPABLE;
-            try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
-            return;
         }
 
         try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
@@ -695,7 +759,7 @@ test "MsdrgHacProcessor execution" {
     try data.sdx_codes.append(allocator, dx);
 
     // 4. Execute
-    try processor.processHospitalAcquiredCondition(&data, allocator);
+    try processor.processHospitalAcquiredCondition(&data, .NOT_EXEMPT, allocator);
 
     // 5. Verify
     const processed_dx = &data.sdx_codes.items[0];

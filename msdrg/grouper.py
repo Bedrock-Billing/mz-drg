@@ -42,6 +42,7 @@ class ClaimInput(TypedDict, total=False):
     age: int
     sex: Literal[0, 1, 2]  # 0=Male, 1=Female, 2=Unknown
     discharge_status: Literal[1, 20]  # 1=Home/Self Care, 20=Died
+    hospital_status: Literal["EXEMPT", "NOT_EXEMPT", "UNKNOWN"]
     pdx: DiagnosisInput
     admit_dx: DiagnosisInput
     sdx: list[DiagnosisInput]

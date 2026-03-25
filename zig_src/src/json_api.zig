@@ -21,6 +21,7 @@ pub const InputClaim = struct {
     age: i32 = 0,
     sex: i32 = 2, // Default UNKNOWN
     discharge_status: i32 = 0,
+    hospital_status: ?[]const u8 = null, // "EXEMPT", "NOT_EXEMPT", "UNKNOWN"
 };
 
 pub const OutputResult = struct {
@@ -66,6 +67,14 @@ fn intToEnum(comptime T: type, v: i32, default: T) T {
         if (v == f.value) return @enumFromInt(f.value);
     }
     return default;
+}
+
+fn parseHospitalStatus(str: ?[]const u8) models.HospitalStatusOptionFlag {
+    if (str) |s| {
+        if (std.mem.eql(u8, s, "EXEMPT")) return .EXEMPT;
+        if (std.mem.eql(u8, s, "UNKNOWN")) return .UNKNOWN;
+    }
+    return .NOT_EXEMPT;
 }
 
 fn mapDiagnosisOutput(arena: std.mem.Allocator, dx: models.DiagnosisCode) !DiagnosisOutput {
@@ -149,7 +158,10 @@ pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdr
     }
 
     // 4. Execute
-    const context = models.ProcessingContext.init(root_allocator, &data, .{});
+    const runtime_options = models.RuntimeOptions{
+        .poa_reporting_exempt = parseHospitalStatus(input.hospital_status),
+    };
+    const context = models.ProcessingContext.init(root_allocator, &data, runtime_options);
     const result = try link.execute(context);
     var final_ctx = result.context;
     defer final_ctx.deinit();
