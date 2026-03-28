@@ -1,6 +1,6 @@
 # mz-drg
 
-**A high-performance MS-DRG grouper written in Zig with Python bindings.**
+**High-performance CMS claim processing tools written in Zig with Python bindings.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Zig](https://img.shields.io/badge/Zig-0.16-orange.svg)](https://ziglang.org)
@@ -8,24 +8,27 @@
 
 ---
 
-mz-drg is an open-source reimplementation of the CMS MS-DRG (Medicare Severity Diagnosis Related Groups) classification engine, written in [Zig](https://ziglang.org) and callable from Python. It takes patient claim data — diagnoses, procedures, demographics — and assigns the appropriate DRG, MDC, severity, and return codes.
+mz-drg provides open-source reimplementations of two CMS tools:
 
-**It is validated against 50,000+ claims against the reference Java grouper with a 100% match rate.**
+- **MS-DRG Grouper** — assigns Diagnosis Related Groups based on diagnoses, procedures, and demographics
+- **Medicare Code Editor (MCE)** — validates ICD diagnosis and procedure codes against CMS edit rules
+
+Both are written in [Zig](https://ziglang.org), callable from Python, and validated against the CMS reference Java implementations with a 100% match rate on 50,000+ claims.
 
 ## Why mz-drg?
 
-The official CMS MS-DRG grouper is a Java application. While accurate, it comes with practical limitations:
+The official CMS tools are Java applications. While accurate, they come with practical limitations:
 
-| | Java Grouper | mz-drg |
+| | Java (CMS) | mz-drg |
 |---|---|---|
 | **Startup** | JVM warmup, seconds | Instant |
-| **Throughput (tested on a Ryzen 5 5600U laptop)** | ~500 claims/sec | ~7,000+ claims/sec | 
+| **Throughput (Ryzen 5 5600U)** | ~500 claims/sec | ~7,000+ claims/sec |
 | **Memory** | JVM heap overhead | Minimal, memory-mapped data |
 | **Dependencies** | JRE 17+, classpath management | Single shared library |
 | **Python integration** | JPype bridge (fragile) | Native ctypes (simple) |
 | **Embedding** | Requires JVM process | C ABI, any language |
 
-mz-drg is not a black-box reimplementation. The grouping logic — preprocessing, exclusion handling, diagnosis clustering, severity assignment, formula evaluation, rerouting, marking, and final grouping — is ported line-by-line from the decompiled Java source and validated claim-by-claim against the original.
+Both engines are ported line-by-line from the decompiled Java source and validated claim-by-claim against the original.
 
 ## Quick start
 
@@ -34,7 +37,8 @@ mz-drg is not a black-box reimplementation. The grouping logic — preprocessing
 ```bash
 pip install msdrg
 ```
-### Use
+
+### MS-DRG Grouper
 
 ```python
 import msdrg
@@ -55,28 +59,48 @@ print(result["final_mdc"])            # 5
 print(result["final_drg_description"])  # "Heart Failure and Shock without CC/MCC"
 ```
 
-### Helper function
+### Medicare Code Editor
 
 ```python
 import msdrg
 
-claim = msdrg.create_claim(
-    version=431,
-    age=65,
-    sex=0,
-    discharge_status=1,
-    pdx="I5020",
-    sdx=["E1165", "I10"],
-    procedures=["02703DZ"],
-)
+with msdrg.MceEditor() as mce:
+    result = mce.edit({
+        "discharge_date": 20250101,
+        "age": 65,
+        "sex": 0,
+        "discharge_status": 1,
+        "pdx": {"code": "I5020"},
+        "sdx": [{"code": "E1165"}],
+        "procedures": []
+    })
 
-with msdrg.MsdrgGrouper() as g:
-    result = g.group(claim)
+print(result["edit_type"])  # "NONE"
+print(result["edits"])      # [] — no edits triggered
 ```
 
-## Input format
+### Unified claim — same dict for both
 
-The `group()` method accepts a dictionary:
+```python
+import msdrg
+
+claim = {
+    "version": 431,
+    "discharge_date": 20250101,
+    "age": 65, "sex": 0, "discharge_status": 1,
+    "pdx": {"code": "I5020"},
+    "sdx": [{"code": "E1165"}],
+    "procedures": []
+}
+
+with msdrg.MsdrgGrouper() as g, msdrg.MceEditor() as mce:
+    drg = g.group(claim)
+    mce_result = mce.edit(claim)
+```
+
+## MS-DRG Grouper
+
+### Input format
 
 ```python
 {
@@ -108,15 +132,11 @@ The `hospital_status` field controls how Hospital-Acquired Condition (HAC) proce
 
 | Value | Behavior |
 |-------|----------|
-| `"NOT_EXEMPT"` | Standard HAC processing. Codes with invalid POA on HAC-eligible diagnoses may mark the claim ungroupable. Claims meeting HAC criteria may have DRG assignment impacted. Default. |
-| `"EXEMPT"` | Hospital is exempt from POA reporting. All HACs are set to `HAC_NOT_APPLICABLE_EXEMPT` with POA error `HOSPITAL_EXEMPT`. No ungroupable conditions from HAC/POA. |
-| `"UNKNOWN"` | Stricter POA validation. Multiple codes with non-Y/W POA, or individual codes with N/U or invalid POA, trigger specific ungroupable return codes. |
+| `"NOT_EXEMPT"` | Standard HAC processing. Default. |
+| `"EXEMPT"` | Hospital is exempt from POA reporting. No HAC/POA ungroupable conditions. |
+| `"UNKNOWN"` | Stricter POA validation with specific ungroupable return codes. |
 
-This is a per-request setting — each call to `group()` can use a different `hospital_status` without reconfiguring the grouper.
-
-## Output format
-
-`group()` returns a dictionary:
+### Output format
 
 ```python
 {
@@ -142,7 +162,7 @@ This is a per-request setting — each call to `group()` can use a different `ho
 }
 ```
 
-## Supported DRG versions
+### Supported DRG versions
 
 | Version | CMS Fiscal Year |
 |---------|----------------|
@@ -155,41 +175,100 @@ This is a per-request setting — each call to `group()` can use a different `ho
 | 430     | FY 2026 (Oct 2025 – Apr 2026) |
 | 431     | FY 2026 (Apr 2026 – Sep 2026) |
 
-Pass the version number in the claim's `version` field.
+## Medicare Code Editor (MCE)
+
+The MCE validates ICD diagnosis and procedure codes against CMS edit rules. It checks for sex conflicts, age conflicts, unacceptable principal diagnoses, E-codes as PDX, non-covered procedures, bilateral procedures, and more.
+
+### Input format
+
+```python
+{
+    "discharge_date": 20250101,  # YYYYMMDD integer (required for MCE)
+    "icd_version": 10,           # 9 or 10 (default: 10)
+    "age": 65,
+    "sex": 0,                    # 0=Male, 1=Female, 2=Unknown
+    "discharge_status": 1,
+    "pdx": {"code": "I5020"},
+    "admit_dx": {"code": "R0602"},
+    "sdx": [{"code": "E1165"}],
+    "procedures": ["02703DZ"]
+}
+```
+
+### Output format
+
+```python
+{
+    "version": 20260930,
+    "edit_type": "PREPAYMENT",    # NONE, PREPAYMENT, POSTPAYMENT, or BOTH
+    "edits": [                    # List of triggered edits (empty if NONE)
+        {
+            "name": "E_CODE_AS_PDX",
+            "count": 1,
+            "code_type": "DIAGNOSIS",
+            "edit_type": "PREPAYMENT"
+        }
+    ]
+}
+```
+
+### Example — E-code as principal diagnosis
+
+```python
+import msdrg
+
+with msdrg.MceEditor() as mce:
+    result = mce.edit({
+        "discharge_date": 20250101,
+        "age": 65, "sex": 0, "discharge_status": 1,
+        "pdx": {"code": "V0001XA"},  # E-code
+        "sdx": [], "procedures": []
+    })
+
+print(result["edit_type"])  # "PREPAYMENT"
+print(result["edits"][0]["name"])  # "E_CODE_AS_PDX"
+```
+
+### Supported edit types
+
+The MCE detects ~35 edit types including:
+- **INVALID_CODE** — code not in CMS master for date range
+- **SEX_CONFLICT** — code restricted by patient sex
+- **AGE_CONFLICT** — code restricted by patient age
+- **E_CODE_AS_PDX** — E-code used as principal diagnosis
+- **MANIFESTATION_AS_PDX** — manifestation code used as PDX
+- **UNACCEPTABLE_PDX** — code unacceptable as principal diagnosis
+- **NON_COVERED** — procedure not covered by Medicare
+- **BILATERAL** — bilateral procedure without bilateral PDX
+- **OPEN_BIOPSY** — open biopsy without prior biopsy
+
+### MCE validation
+
+The MCE implementation is validated against the CMS Java MCE 2.0 v43.1 with a 100% match rate on 50,000 test claims.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│  Python (msdrg)                                 │
-│  ctypes ──► C API (c_api.zig)                   │
-│                │                                │
-│                ▼                                │
-│  GrouperChain  (data loader + version router)   │
-│       │                                         │
-│       ▼                                         │
-│  Chain of Links:                                │
-│  ┌──────────────────────────────────────────┐   │
-│  │ Preprocess  →  Exclusions  →  Grouping   │   │
-│  │    ↓              ↓           (initial)  │   │
-│  │ Attributes    Cluster Map        ↓       │   │
-│  │                              Marking     │   │
-│  │                                 ↓        │   │
-│  │              HAC Processing ◄────────    │   │
-│  │              (EXEMPT/NON_EXEMPT/UNKNOWN) │   │
-│  │                                 ↓        │   │
-│  │                           Grouping       │   │
-│  │                           (final)        │   │
-│  │                                 ↓        │   │
-│  │                           Final DRG      │   │
-│  └──────────────────────────────────────────┘   │
-│       │                                         │
-│       ▼                                         │
-│  Memory-mapped binary data (16 .bin files)      │
-└─────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│  Python (msdrg)                                      │
+│  ctypes ──► C API (c_api.zig, mce_c_api.zig)        │
+│                │                                     │
+│    ┌───────────┴───────────┐                         │
+│    ▼                       ▼                         │
+│  MS-DRG Grouper         MCE Editor                  │
+│  (GrouperChain)         (MceComponent)              │
+│    │                       │                         │
+│    ▼                       ▼                         │
+│  Chain of Links:        Validation Pipeline:        │
+│  Preprocess → Group     Code Check → Edit Rules     │
+│  → HAC → Final DRG      → Output Counts            │
+│    │                       │                         │
+│    ▼                       ▼                         │
+│  Memory-mapped .bin files (22 total)                │
+└──────────────────────────────────────────────────────┘
 ```
 
-The grouper loads 16 precompiled binary data files at startup (diagnosis definitions, DRG formulas, cluster maps, exclusion groups, etc.) via memory mapping. The grouping pipeline is a chain of composable processors, each transforming the claim context. This design mirrors the original Java architecture for validation purposes.
+Both engines share the same shared library and data files. The grouping pipeline is a chain of composable processors; the MCE is a linear validation pipeline. Both mirror the original Java architecture for validation purposes.
 
 ## Building from source
 
@@ -211,16 +290,16 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-This compiles the Zig shared library and bundles the data files into the Python package.
+This compiles the Zig shared library and bundles all data files into the Python package.
 
 ### Run tests
 
 ```bash
-# Zig unit tests (27+ tests)
+# Zig unit tests (60+ tests)
 cd zig_src && zig build test
 
-# Python tests
-python -m pytest tests/test_grouper.py
+# Python tests (MS-DRG + MCE)
+python -m pytest tests/
 ```
 
 ### Data pipeline
@@ -235,35 +314,44 @@ This runs extract → import → compile → zig build in sequence. See `scripts
 
 ## Comparison testing
 
-The `tests/` directory contains tools for validating mz-drg against the reference Java grouper.
+The `tests/` directory contains tools for validating mz-drg against the reference Java implementations.
 
 ```bash
 # Generate random test claims
 python tests/generate_test_claims.py --count 1000 --out tests/claims.json
 
-# Compare Java vs Zig output
+# Compare MS-DRG grouper
 python tests/compare_groupers.py --file tests/claims.json
 
-# Benchmark both
+# Compare MCE editor
+python tests/compare_mce.py --file tests/claims.json
+
+# Benchmark
 python tests/compare_groupers.py --file tests/claims.json --benchmark
 ```
 
-> The Java comparison requires JDK 17+ and the reference JARs in `jars/`. This is only needed for validation — the Python package itself has no Java dependency.
+> The Java comparisons require JDK 17+ and the reference JARs in `jars/`. This is only needed for validation — the Python package itself has no Java dependency.
 
 ## C API
 
-mz-drg exposes a C ABI for integration with any language. See `zig_src/src/c_api.zig` for the full API.
+mz-drg exposes a C ABI for integration with any language.
+
+### MS-DRG Grouper
 
 ```c
-// Initialize (loads all data, pre-builds chains)
 void* ctx = msdrg_context_init("/path/to/data/bin");
-
-// Group a claim via JSON
-const char* result_json = msdrg_group_json(ctx, "{\"version\":431,...}");
-
-// Free
-msdrg_string_free(result_json);
+const char* result = msdrg_group_json(ctx, "{\"version\":431,...}");
+msdrg_string_free(result);
 msdrg_context_free(ctx);
+```
+
+### MCE Editor
+
+```c
+void* mce = mce_context_init("/path/to/data/bin");
+const char* result = mce_edit_json(mce, "{\"discharge_date\":20250101,...}");
+msdrg_string_free(result);
+mce_context_free(mce);
 ```
 
 Functions are thread-safe after initialization. The context is immutable and can be shared across threads.
@@ -272,27 +360,33 @@ Functions are thread-safe after initialization. The context is immutable and can
 
 ```
 mz-drg/
-├── msdrg/                    # Python package
+├── msdrg/                       # Python package
 │   ├── __init__.py
-│   └── grouper.py            # MsdrgGrouper class
-├── zig_src/                  # Zig source
+│   ├── grouper.py               # MsdrgGrouper class
+│   └── mce.py                   # MceEditor class
+├── zig_src/                     # Zig source
 │   ├── build.zig
 │   ├── main.zig
 │   └── src/
-│       ├── c_api.zig         # C ABI exports
-│       ├── json_api.zig      # JSON in/out
-│       ├── msdrg.zig         # GrouperChain + version routing
-│       ├── chain.zig         # Composable processor chain
-│       ├── models.zig        # Data models
-│       ├── preprocess.zig    # Exclusion & attribute handling
-│       ├── grouping.zig      # DRG formula matching
-│       ├── marking.zig       # Code marking logic
-│       ├── hac.zig           # Hospital-Acquired Conditions
-│       └── ...               # 20+ modules, ~8,500 lines
-├── data/bin/                 # Prebuilt binary data (16 files)
-├── scripts/                  # Data extraction & compilation
-├── tests/                    # Comparison & benchmark tools
-├── python_client/            # Legacy Python wrapper
+│       ├── c_api.zig            # MS-DRG C ABI exports
+│       ├── json_api.zig         # MS-DRG JSON in/out
+│       ├── msdrg.zig            # GrouperChain + version routing
+│       ├── chain.zig            # Composable processor chain
+│       ├── models.zig           # Data models
+│       ├── preprocess.zig       # Exclusion & attribute handling
+│       ├── grouping.zig         # DRG formula matching
+│       ├── marking.zig          # Code marking logic
+│       ├── hac.zig              # Hospital-Acquired Conditions
+│       ├── mce.zig              # MCE main editor
+│       ├── mce_c_api.zig        # MCE C ABI exports
+│       ├── mce_json_api.zig     # MCE JSON in/out
+│       ├── mce_data.zig         # MCE data loading
+│       ├── mce_enums.zig        # MCE attributes & edits
+│       ├── mce_editing.zig      # MCE edit rules
+│       └── mce_validation.zig   # MCE validation logic
+├── data/bin/                    # Prebuilt binary data (22 files)
+├── scripts/                     # Data extraction & compilation
+├── tests/                       # Comparison & benchmark tools
 ├── pyproject.toml
 └── setup.py
 ```
@@ -303,4 +397,4 @@ MIT — see [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-This project is intended for healthcare IT professionals who need a fast, embeddable, and auditable DRG classification engine.
+This project is intended for healthcare IT professionals who need fast, embeddable, and auditable claim processing tools.

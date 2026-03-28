@@ -59,4 +59,11 @@ pub fn main(init: std.process.Init) !void {
 
 test {
     _ = @import("src/integration_test.zig");
+    _ = @import("src/mce_data.zig");
+    _ = @import("src/mce_enums.zig");
+    _ = @import("src/mce_validation.zig");
+    _ = @import("src/mce_editing.zig");
+    _ = @import("src/mce.zig");
+    _ = @import("src/mce_json_api.zig");
+    _ = @import("src/mce_c_api.zig");
 }

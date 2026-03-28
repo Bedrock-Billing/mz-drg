@@ -4,6 +4,15 @@ const models = @import("models.zig");
 const chain = @import("chain.zig");
 const json_api = @import("json_api.zig");
 
+// MCE module — import ensures MCE export functions are included in the shared library
+const mce_c_api = @import("mce_c_api.zig");
+const mce_json_api = @import("mce_json_api.zig");
+const mce = @import("mce.zig");
+const mce_data = @import("mce_data.zig");
+const mce_enums = @import("mce_enums.zig");
+const mce_validation = @import("mce_validation.zig");
+const mce_editing = @import("mce_editing.zig");
+
 // --- Thread Safety ---
 // This C API is designed for thread-safe concurrent access:
 //
@@ -331,4 +340,15 @@ test "msdrg_group_json null json_str" {
 
     const result = msdrg_group_json(ctx, null);
     try std.testing.expectEqual(@as([*c]const u8, null), result);
+}
+
+// --- MCE Symbol Anchors ---
+// These comptime references force the MCE export functions to be included
+// in the shared library. Without them, zig's dead code elimination strips
+// the export functions from mce_c_api.zig since they're in a separate module.
+
+comptime {
+    _ = mce_c_api.mce_context_init;
+    _ = mce_c_api.mce_context_free;
+    _ = mce_c_api.mce_edit_json;
 }
