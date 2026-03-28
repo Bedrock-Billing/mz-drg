@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Zig](https://img.shields.io/badge/Zig-0.16-orange.svg)](https://ziglang.org)
 [![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://python.org)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Bedrock-Billing.github.io/mz-drg/)
 
 ---
 
@@ -191,7 +192,7 @@ The MCE validates ICD diagnosis and procedure codes against CMS edit rules. It c
     "pdx": {"code": "I5020"},
     "admit_dx": {"code": "R0602"},
     "sdx": [{"code": "E1165"}],
-    "procedures": ["02703DZ"]
+    "procedures": [{"code": "02703DZ"}]
 }
 ```
 
@@ -244,7 +245,7 @@ The MCE detects ~35 edit types including:
 
 ### MCE validation
 
-The MCE implementation is validated against the CMS Java MCE 2.0 v43.1 with a 100% match rate on 50,000 test claims.
+The MCE implementation is validated against the CMS Java MCE 2.0 v43.1 with a 100% match rate on 50l,000 test claims.
 
 ## Architecture
 
@@ -394,6 +395,10 @@ mz-drg/
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Documentation
+
+Full documentation is available at **[Bedrock-Billing.github.io/mz-drg](https://Bedrock-Billing.github.io/mz-drg/)**.
 
 ## Acknowledgments
 

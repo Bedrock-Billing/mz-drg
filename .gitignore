@@ -44,6 +44,9 @@ venv.bak/
 msdrg/_lib/
 msdrg/data/
 
+# MkDocs
+site/
+
 # Zig
 zig-cache/
 zig-out/

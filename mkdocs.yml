@@ -1,0 +1,108 @@
+site_name: mz-drg
+site_description: High-performance CMS claim processing tools in Zig with Python bindings
+site_url: https://Bedrock-Billing.github.io/mz-drg/
+repo_url: https://github.com/Bedrock-Billing/mz-drg
+repo_name: Bedrock-Billing/mz-drg
+edit_uri: edit/master/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.instant.progress
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - content.tabs.link
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+  logo: pp-logo.svg
+  favicon: pp-logo.svg
+
+plugins:
+  - search
+  - minify:
+      minify_html: true
+
+markdown_extensions:
+  - tables
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - def_list
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+  - MS-DRG Grouper:
+    - Overview: grouper/overview.md
+    - Input Format: grouper/input.md
+    - Output Format: grouper/output.md
+    - Hospital Status: grouper/hospital-status.md
+    - Versions: grouper/versions.md
+  - MCE Editor:
+    - Overview: mce/overview.md
+    - Input Format: mce/input.md
+    - Output Format: mce/output.md
+    - Edit Types: mce/edits.md
+  - Developer Guide:
+    - Building from Source: dev/building.md
+    - C API: dev/c-api.md
+    - Testing: dev/testing.md
+    - Data Pipeline: dev/data-pipeline.md
+    - Cross-Compilation: dev/cross-compilation.md
+  - API Reference: api-reference.md
+  - Changelog: changelog.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Bedrock-Billing/mz-drg
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/msdrg/
