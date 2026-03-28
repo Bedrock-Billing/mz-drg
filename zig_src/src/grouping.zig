@@ -92,6 +92,17 @@ pub const MsdrgMaskBuilder = struct {
                 } else {
                     try m.put(any_key, attr_mask);
                 }
+
+                // Also add unprefixed list_name (formulas may reference without prefix)
+                if (attr.prefix != .NONE) {
+                    const bare_key = try alloc.dupe(u8, attr.list_name);
+                    if (m.getPtr(bare_key)) |existing_mask| {
+                        existing_mask.* &= attr_mask;
+                        alloc.free(bare_key);
+                    } else {
+                        try m.put(bare_key, attr_mask);
+                    }
+                }
             }
         }.call;
 
@@ -209,6 +220,7 @@ pub const MsdrgMaskBuilder = struct {
             }
 
             if (!pdx.is(.VALID)) {
+                std.log.debug("MsdrgMaskBuilder: PDX {s} is NOT VALID, adding INVALID_PDX", .{pdx.value.toSlice()});
                 try addAttr(&mask, models.Attribute{ .prefix = .PDX, .list_name = models.SourceLogicLists.INVALID_PDX }, allocator, &cumulatives);
             }
 
@@ -481,7 +493,21 @@ pub const GroupingExecutor = struct {
                 allocator.free(sev_key);
 
                 if (is_match) {
+                    // Check if this is a "return code" formula (DRG 0, specific names)
                     if (drg_formula.drg == 0 and drg_formula.reroute_mdc_id == 0) {
+                        const formula_name = drg_formula.getFormula(base);
+                        const grc = formulaNameToReturnCode(formula_name);
+                        if (grc != .OK) {
+                            std.log.debug("GroupingExecutor: Matched formula '{s}' with return code {s}", .{ formula_name, @tagName(grc) });
+                            // Set return code on result and stop
+                            data.initial_result.return_code = grc;
+                            data.final_result.return_code = grc;
+                            data.initial_result.drg = 999;
+                            data.final_result.drg = 999;
+                            data.initial_result.mdc = 0;
+                            data.final_result.mdc = 0;
+                            return .{ .formula = drg_formula, .severity = severity, .new_mdc = null };
+                        }
                         std.log.debug("GroupingExecutor: Matched DRG 0, ignoring...", .{});
                         continue;
                     }
@@ -542,6 +568,20 @@ pub const MsdrgInitialPreGrouping = struct {
         const result = try GroupingExecutor.group(self.formula_data, data, allocator, 0, self.version);
 
         if (result) |res| {
+            // Check for return code from formula (e.g. INVALID_PDX)
+            if (data.initial_result.return_code != .OK) {
+                // Formula set a return code (e.g. INVALID_PDX) — set DRG 999 and stop
+                data.initial_result.drg = 999;
+                data.initial_result.mdc = 0;
+                data.final_result.drg = 999;
+                data.final_result.mdc = 0;
+                data.final_result.return_code = data.initial_result.return_code;
+                return chain.LinkResult{
+                    .context = context,
+                    .continue_processing = false,
+                };
+            }
+
             data.initial_result.base_drg = res.formula.base_drg;
             data.initial_result.drg = res.formula.drg;
             if (res.new_mdc) |rr| {
@@ -883,25 +923,26 @@ pub const MsdrgFinalDrgResults = struct {
     pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
         const data = context.data;
+
         if (data.final_result.drg == null) {
             data.final_result.drg = 999;
             data.final_result.mdc = 0;
             data.final_result.return_code = .UNGROUPABLE;
-        } else {
-            data.final_result.return_code = .OK;
         }
 
-        // Fetch DRG description
+        // Always fetch descriptions (even if already set by another processor)
         if (data.final_result.drg) |drg| {
-            if (self.description_data.getEntry(@intCast(drg), self.version)) |entry| {
-                data.final_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr);
+            if (data.final_result.drg_description == null or data.final_result.drg_description.?.len == 0) {
+                if (self.description_data.*.getEntry(@intCast(drg), self.version)) |entry| {
+                    data.final_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr);
+                }
             }
         }
-
-        // Fetch MDC description
         if (data.final_result.mdc) |mdc| {
-            if (self.mdc_description_data.getEntry(@intCast(mdc), self.version)) |entry| {
-                data.final_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr);
+            if (data.final_result.mdc_description == null or data.final_result.mdc_description.?.len == 0) {
+                if (self.mdc_description_data.*.getEntry(@intCast(mdc), self.version)) |entry| {
+                    data.final_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr);
+                }
             }
         }
 
@@ -911,3 +952,14 @@ pub const MsdrgFinalDrgResults = struct {
         };
     }
 };
+
+/// Map formula names to grouper return codes.
+/// This matches Java MsdrgSourceLogicLists which associates return codes with formula names.
+fn formulaNameToReturnCode(formula_name: []const u8) models.GrouperReturnCode {
+    if (std.mem.eql(u8, formula_name, "INVALID_PDX")) return .INVALID_PDX;
+    if (std.mem.eql(u8, formula_name, "INVALID_DSTAT")) return .INVALID_DISCHARGE_STATUS;
+    if (std.mem.eql(u8, formula_name, "INVALID_AGE")) return .INVALID_AGE;
+    if (std.mem.eql(u8, formula_name, "INVALID_SEX")) return .INVALID_SEX;
+    if (std.mem.eql(u8, formula_name, "pdx_ecode")) return .DX_CANNOT_BE_PDX;
+    return .OK;
+}
