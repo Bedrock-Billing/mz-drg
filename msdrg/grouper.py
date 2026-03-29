@@ -94,7 +94,6 @@ class GroupResult(TypedDict, total=False):
     proc_output: list[ProcedureOutput]
 
 
-
 # ---------------------------------------------------------------------------
 # Main grouper class
 # ---------------------------------------------------------------------------
@@ -160,8 +159,14 @@ class MsdrgGrouper:
 
     def __del__(self) -> None:
         if hasattr(self, "ctx") and self.ctx:
-            self.lib.msdrg_context_free(self.ctx)
-            self.ctx = None
+            import warnings
+
+            warnings.warn(
+                "MsdrgGrouper was not closed. Use 'with' or call close() explicitly.",
+                ResourceWarning,
+                stacklevel=2,
+            )
+            self.close()
 
     def close(self) -> None:
         """Explicitly free the grouper context and release resources."""

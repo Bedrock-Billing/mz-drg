@@ -5,13 +5,13 @@ from msdrg import (
     MceEditor,
     MsdrgGrouper,
     create_mce_input,
-    create_claim,
 )
 
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def mce():
@@ -43,8 +43,13 @@ class TestCreateMceInput:
 
     def test_with_sdx_and_procedures(self):
         claim = create_mce_input(
-            discharge_date=20250101, age=50, sex=1, discharge_status=1,
-            pdx="J189", sdx=["E1165"], procedures=["02703DZ"],
+            discharge_date=20250101,
+            age=50,
+            sex=1,
+            discharge_status=1,
+            pdx="J189",
+            sdx=["E1165"],
+            procedures=["02703DZ"],
         )
         assert len(claim["sdx"]) == 1
         assert len(claim["procedures"]) == 1
@@ -57,24 +62,30 @@ class TestCreateMceInput:
 
 class TestMceBasic:
     def test_valid_claim(self, mce: MceEditor):
-        result = mce.edit(create_mce_input(
-            discharge_date=20250101, age=65, sex=0, discharge_status=1, pdx="I5020"
-        ))
+        result = mce.edit(
+            create_mce_input(
+                discharge_date=20250101, age=65, sex=0, discharge_status=1, pdx="I5020"
+            )
+        )
         assert result["edit_type"] == "NONE"
         assert result["edits"] == []
 
     def test_result_has_required_keys(self, mce: MceEditor):
-        result = mce.edit(create_mce_input(
-            discharge_date=20250101, age=65, sex=0, discharge_status=1, pdx="I5020"
-        ))
+        result = mce.edit(
+            create_mce_input(
+                discharge_date=20250101, age=65, sex=0, discharge_status=1, pdx="I5020"
+            )
+        )
         assert "version" in result
         assert "edit_type" in result
         assert "edits" in result
 
     def test_version_populated(self, mce: MceEditor):
-        result = mce.edit(create_mce_input(
-            discharge_date=20250101, age=65, sex=0, discharge_status=1, pdx="I5020"
-        ))
+        result = mce.edit(
+            create_mce_input(
+                discharge_date=20250101, age=65, sex=0, discharge_status=1, pdx="I5020"
+            )
+        )
         assert result["version"] > 0
 
 
@@ -85,10 +96,15 @@ class TestMceBasic:
 
 class TestECodeAsPdx:
     def test_ecode_triggers_edit(self, mce: MceEditor):
-        result = mce.edit(create_mce_input(
-            discharge_date=20250101, age=65, sex=0, discharge_status=1,
-            pdx="V0001XA",  # E-code
-        ))
+        result = mce.edit(
+            create_mce_input(
+                discharge_date=20250101,
+                age=65,
+                sex=0,
+                discharge_status=1,
+                pdx="V0001XA",  # E-code
+            )
+        )
         assert result["edit_type"] == "PREPAYMENT"
         edit_names = [e["name"] for e in result["edits"]]
         assert "E_CODE_AS_PDX" in edit_names
@@ -102,13 +118,17 @@ class TestECodeAsPdx:
 class TestSexConflict:
     def test_female_code_male_sex(self, mce: MceEditor):
         # A34 has "female" flag, active until 20240930
-        result = mce.edit({
-            "discharge_date": 20240101,  # within active range
-            "age": 25, "sex": 0, "discharge_status": 1,
-            "pdx": {"code": "I5020"},
-            "sdx": [{"code": "A34"}],
-            "procedures": [],
-        })
+        result = mce.edit(
+            {
+                "discharge_date": 20240101,  # within active range
+                "age": 25,
+                "sex": 0,
+                "discharge_status": 1,
+                "pdx": {"code": "I5020"},
+                "sdx": [{"code": "A34"}],
+                "procedures": [],
+            }
+        )
         edit_names = [e["name"] for e in result["edits"]]
         assert "SEX_CONFLICT" in edit_names
 
@@ -120,10 +140,15 @@ class TestSexConflict:
 
 class TestAgeConflict:
     def test_newborn_code_adult_age(self, mce: MceEditor):
-        result = mce.edit(create_mce_input(
-            discharge_date=20250101, age=65, sex=0, discharge_status=1,
-            pdx="A33",  # Newborn code
-        ))
+        result = mce.edit(
+            create_mce_input(
+                discharge_date=20250101,
+                age=65,
+                sex=0,
+                discharge_status=1,
+                pdx="A33",  # Newborn code
+            )
+        )
         edit_names = [e["name"] for e in result["edits"]]
         assert "AGE_CONFLICT" in edit_names
 
@@ -135,10 +160,15 @@ class TestAgeConflict:
 
 class TestUnacceptablePdx:
     def test_unacceptable_triggers_edit(self, mce: MceEditor):
-        result = mce.edit(create_mce_input(
-            discharge_date=20250101, age=65, sex=0, discharge_status=1,
-            pdx="Z9989",  # Unacceptable PDX
-        ))
+        result = mce.edit(
+            create_mce_input(
+                discharge_date=20250101,
+                age=65,
+                sex=0,
+                discharge_status=1,
+                pdx="Z9989",  # Unacceptable PDX
+            )
+        )
         edit_names = [e["name"] for e in result["edits"]]
         assert "UNACCEPTABLE_PDX" in edit_names
 
@@ -151,9 +181,15 @@ class TestUnacceptablePdx:
 class TestMceLifecycle:
     def test_context_manager(self):
         with MceEditor() as mce:
-            result = mce.edit(create_mce_input(
-                discharge_date=20250101, age=65, sex=0, discharge_status=1, pdx="I5020"
-            ))
+            result = mce.edit(
+                create_mce_input(
+                    discharge_date=20250101,
+                    age=65,
+                    sex=0,
+                    discharge_status=1,
+                    pdx="I5020",
+                )
+            )
             assert result["edit_type"] == "NONE"
 
     def test_close_idempotent(self):
@@ -165,9 +201,15 @@ class TestMceLifecycle:
         mce = MceEditor()
         mce.close()
         with pytest.raises(RuntimeError, match="closed"):
-            mce.edit(create_mce_input(
-                discharge_date=20250101, age=65, sex=0, discharge_status=1, pdx="I5020"
-            ))
+            mce.edit(
+                create_mce_input(
+                    discharge_date=20250101,
+                    age=65,
+                    sex=0,
+                    discharge_status=1,
+                    pdx="I5020",
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +223,9 @@ class TestUnifiedClaim:
         claim = {
             "version": 431,
             "discharge_date": 20250101,
-            "age": 65, "sex": 0, "discharge_status": 1,
+            "age": 65,
+            "sex": 0,
+            "discharge_status": 1,
             "hospital_status": "NOT_EXEMPT",
             "pdx": {"code": "I5020"},
             "sdx": [{"code": "E1165"}],
@@ -199,7 +243,9 @@ class TestUnifiedClaim:
         claim = {
             "version": 431,
             "discharge_date": 20250101,
-            "age": 65, "sex": 0, "discharge_status": 1,
+            "age": 65,
+            "sex": 0,
+            "discharge_status": 1,
             "pdx": {"code": "V0001XA"},
             "sdx": [],
             "procedures": [],

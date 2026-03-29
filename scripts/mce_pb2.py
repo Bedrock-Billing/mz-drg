@@ -4,46 +4,43 @@
 # source: mce.proto
 # Protobuf Python Version: 6.31.1
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'mce.proto'
+    _runtime_version.Domain.PUBLIC, 6, 31, 1, "", "mce.proto"
 )
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
 
 
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\tmce.proto\x12\x03mce\"\xda\x02\n\x04Root\x12\'\n\x0c\x61geRangeRoot\x18\x01 \x01(\x0b\x32\x11.mce.AgeRangeRoot\x12\x35\n\x13\x64ischargeStatusRoot\x18\x02 \x01(\x0b\x32\x18.mce.DischargeStatusRoot\x12,\n\x0fi10DxMasterRoot\x18\x03 \x01(\x0b\x32\x13.mce.CodeMasterRoot\x12,\n\x0fi10SgMasterRoot\x18\x04 \x01(\x0b\x32\x13.mce.CodeMasterRoot\x12+\n\x0ei9DxMasterRoot\x18\x05 \x01(\x0b\x32\x13.mce.CodeMasterRoot\x12+\n\x0ei9SgMasterRoot\x18\x06 \x01(\x0b\x32\x13.mce.CodeMasterRoot\x12\x12\n\ndateFormat\x18\x07 \x01(\t\x12\x0f\n\x07version\x18\x08 \x01(\x05\x12\x17\n\x0fterminationDate\x18\t \x01(\t\";\n\x0c\x41geRangeRoot\x12+\n\x0f\x61geRangeEntries\x18\x01 \x03(\x0b\x32\x12.mce.AgeRangeEntry\"g\n\rAgeRangeEntry\x12\x10\n\x08\x61geGroup\x18\x01 \x01(\t\x12\x10\n\x08startAge\x18\x02 \x01(\x05\x12\x0e\n\x06\x65ndAge\x18\x03 \x01(\x05\x12\x11\n\tstartDate\x18\x04 \x01(\t\x12\x0f\n\x07\x65ndDate\x18\x05 \x01(\t\"P\n\x13\x44ischargeStatusRoot\x12\x39\n\x16\x64ischargeStatusEntries\x18\x01 \x03(\x0b\x32\x19.mce.DischargeStatusEntry\"H\n\x14\x44ischargeStatusEntry\x12\x0c\n\x04\x63ode\x18\x01 \x01(\x05\x12\x11\n\tstartDate\x18\x02 \x01(\t\x12\x0f\n\x07\x65ndDate\x18\x03 \x01(\t\"A\n\x0e\x43odeMasterRoot\x12/\n\x11\x63odeMasterEntries\x18\x01 \x03(\x0b\x32\x14.mce.CodeMasterEntry\"R\n\x0f\x43odeMasterEntry\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x11\n\tstartDate\x18\x02 \x01(\t\x12\x0f\n\x07\x65ndDate\x18\x03 \x01(\t\x12\r\n\x05\x66lags\x18\x04 \x03(\tB\x1a\n\x12gov.cms.editor.mceB\x04\x44\x61ta')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\tmce.proto\x12\x03mce"\xda\x02\n\x04Root\x12\'\n\x0c\x61geRangeRoot\x18\x01 \x01(\x0b\x32\x11.mce.AgeRangeRoot\x12\x35\n\x13\x64ischargeStatusRoot\x18\x02 \x01(\x0b\x32\x18.mce.DischargeStatusRoot\x12,\n\x0fi10DxMasterRoot\x18\x03 \x01(\x0b\x32\x13.mce.CodeMasterRoot\x12,\n\x0fi10SgMasterRoot\x18\x04 \x01(\x0b\x32\x13.mce.CodeMasterRoot\x12+\n\x0ei9DxMasterRoot\x18\x05 \x01(\x0b\x32\x13.mce.CodeMasterRoot\x12+\n\x0ei9SgMasterRoot\x18\x06 \x01(\x0b\x32\x13.mce.CodeMasterRoot\x12\x12\n\ndateFormat\x18\x07 \x01(\t\x12\x0f\n\x07version\x18\x08 \x01(\x05\x12\x17\n\x0fterminationDate\x18\t \x01(\t";\n\x0c\x41geRangeRoot\x12+\n\x0f\x61geRangeEntries\x18\x01 \x03(\x0b\x32\x12.mce.AgeRangeEntry"g\n\rAgeRangeEntry\x12\x10\n\x08\x61geGroup\x18\x01 \x01(\t\x12\x10\n\x08startAge\x18\x02 \x01(\x05\x12\x0e\n\x06\x65ndAge\x18\x03 \x01(\x05\x12\x11\n\tstartDate\x18\x04 \x01(\t\x12\x0f\n\x07\x65ndDate\x18\x05 \x01(\t"P\n\x13\x44ischargeStatusRoot\x12\x39\n\x16\x64ischargeStatusEntries\x18\x01 \x03(\x0b\x32\x19.mce.DischargeStatusEntry"H\n\x14\x44ischargeStatusEntry\x12\x0c\n\x04\x63ode\x18\x01 \x01(\x05\x12\x11\n\tstartDate\x18\x02 \x01(\t\x12\x0f\n\x07\x65ndDate\x18\x03 \x01(\t"A\n\x0e\x43odeMasterRoot\x12/\n\x11\x63odeMasterEntries\x18\x01 \x03(\x0b\x32\x14.mce.CodeMasterEntry"R\n\x0f\x43odeMasterEntry\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x11\n\tstartDate\x18\x02 \x01(\t\x12\x0f\n\x07\x65ndDate\x18\x03 \x01(\t\x12\r\n\x05\x66lags\x18\x04 \x03(\tB\x1a\n\x12gov.cms.editor.mceB\x04\x44\x61ta'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'mce_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "mce_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-  _globals['DESCRIPTOR']._loaded_options = None
-  _globals['DESCRIPTOR']._serialized_options = b'\n\022gov.cms.editor.mceB\004Data'
-  _globals['_ROOT']._serialized_start=19
-  _globals['_ROOT']._serialized_end=365
-  _globals['_AGERANGEROOT']._serialized_start=367
-  _globals['_AGERANGEROOT']._serialized_end=426
-  _globals['_AGERANGEENTRY']._serialized_start=428
-  _globals['_AGERANGEENTRY']._serialized_end=531
-  _globals['_DISCHARGESTATUSROOT']._serialized_start=533
-  _globals['_DISCHARGESTATUSROOT']._serialized_end=613
-  _globals['_DISCHARGESTATUSENTRY']._serialized_start=615
-  _globals['_DISCHARGESTATUSENTRY']._serialized_end=687
-  _globals['_CODEMASTERROOT']._serialized_start=689
-  _globals['_CODEMASTERROOT']._serialized_end=754
-  _globals['_CODEMASTERENTRY']._serialized_start=756
-  _globals['_CODEMASTERENTRY']._serialized_end=838
+    _globals["DESCRIPTOR"]._loaded_options = None
+    _globals["DESCRIPTOR"]._serialized_options = b"\n\022gov.cms.editor.mceB\004Data"
+    _globals["_ROOT"]._serialized_start = 19
+    _globals["_ROOT"]._serialized_end = 365
+    _globals["_AGERANGEROOT"]._serialized_start = 367
+    _globals["_AGERANGEROOT"]._serialized_end = 426
+    _globals["_AGERANGEENTRY"]._serialized_start = 428
+    _globals["_AGERANGEENTRY"]._serialized_end = 531
+    _globals["_DISCHARGESTATUSROOT"]._serialized_start = 533
+    _globals["_DISCHARGESTATUSROOT"]._serialized_end = 613
+    _globals["_DISCHARGESTATUSENTRY"]._serialized_start = 615
+    _globals["_DISCHARGESTATUSENTRY"]._serialized_end = 687
+    _globals["_CODEMASTERROOT"]._serialized_start = 689
+    _globals["_CODEMASTERROOT"]._serialized_end = 754
+    _globals["_CODEMASTERENTRY"]._serialized_start = 756
+    _globals["_CODEMASTERENTRY"]._serialized_end = 838
 # @@protoc_insertion_point(module_scope)

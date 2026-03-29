@@ -42,7 +42,7 @@ def parse_mce_bin(path: str) -> mce_pb2.Root:
 
 def print_summary(root: mce_pb2.Root):
     """Print summary of all tables in the MCE data."""
-    print(f"MCE Data Summary")
+    print("MCE Data Summary")
     print(f"  Version:           {root.version}")
     print(f"  Date format:       {root.dateFormat}")
     print(f"  Termination date:  {root.terminationDate}")

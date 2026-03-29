@@ -16,7 +16,7 @@ jars = [
     "msdrg-model-v2-2.11.0.jar",
     "gfc-base-api-3.4.9.jar",
     "gfc-base-factory-3.4.9.jar",
-    "msdrg-core-43.1.0.0.jar"
+    "msdrg-core-43.1.0.0.jar",
 ]
 
 classpath = [os.path.join(JAR_DIR, jar) for jar in jars]
@@ -39,6 +39,7 @@ except Exception as e:
     print(f"Failed to load DataBlob class: {e}")
     sys.exit(1)
 
+
 def get_private_field(instance, field_name):
     try:
         field = instance.getClass().getDeclaredField(field_name)
@@ -48,10 +49,11 @@ def get_private_field(instance, field_name):
         print(f"Error accessing field {field_name}: {e}")
         return None
 
+
 def serialize_value(value):
     if value is None:
         return None
-    
+
     # Handle JPype wrappers and Python types
     if isinstance(value, (str, int, float, bool)):
         return value
@@ -60,17 +62,21 @@ def serialize_value(value):
     if hasattr(value, "getClass"):
         cls = value.getClass()
         cls_name = str(cls.getName())
-        
+
         # Handle Collections
-        if "java.util.List" in cls_name or "java.util.ArrayList" in cls_name or "java.util.LinkedList" in cls_name:
+        if (
+            "java.util.List" in cls_name
+            or "java.util.ArrayList" in cls_name
+            or "java.util.LinkedList" in cls_name
+        ):
             return [serialize_value(item) for item in value]
-        
+
         if "java.util.Set" in cls_name or "java.util.HashSet" in cls_name:
-             return [serialize_value(item) for item in value]
-             
+            return [serialize_value(item) for item in value]
+
         if cls_name.startswith("java.lang."):
             return str(value)
-            
+
         # Custom objects - use reflection to get fields
         fields = {}
         current_cls = cls
@@ -88,8 +94,9 @@ def serialize_value(value):
                     pass
             current_cls = current_cls.getSuperclass()
         return fields
-        
+
     return str(value)
+
 
 def traverse_int_range_tree(node, results):
     if node is None:
@@ -97,7 +104,7 @@ def traverse_int_range_tree(node, results):
 
     # Access private fields of Node
     node_cls = node.getClass()
-    
+
     def get_node_field(name):
         f = node_cls.getDeclaredField(name)
         f.setAccessible(True)
@@ -110,9 +117,10 @@ def traverse_int_range_tree(node, results):
     right = get_node_field("right")
 
     results.append((low, high, data))
-    
+
     traverse_int_range_tree(left, results)
     traverse_int_range_tree(right, results)
+
 
 def extract_int_range_map(blob, field_name, output_dir):
     print(f"Extracting {field_name}...")
@@ -122,7 +130,9 @@ def extract_int_range_map(blob, field_name, output_dir):
             print(f"Field {field_name} is null or not found")
             return
 
-        internal_container_field = int_range_map.getClass().getDeclaredField("internalContainer")
+        internal_container_field = int_range_map.getClass().getDeclaredField(
+            "internalContainer"
+        )
         internal_container_field.setAccessible(True)
         internal_container = internal_container_field.get(int_range_map)
 
@@ -130,31 +140,35 @@ def extract_int_range_map(blob, field_name, output_dir):
         for entry in internal_container.entrySet():
             key = entry.getKey()
             tree = entry.getValue()
-            
+
             root_field = tree.getClass().getDeclaredField("root")
             root_field.setAccessible(True)
             root = root_field.get(tree)
-            
+
             ranges = []
             traverse_int_range_tree(root, ranges)
-            
+
             for low, high, data in ranges:
                 serialized_value = serialize_value(data)
                 # If it's a list of strings (like in JSON), we might want to keep it as JSON string
                 if isinstance(serialized_value, (list, dict)):
                     serialized_value = json.dumps(serialized_value)
-                
-                rows.append({
-                    "key": str(key),
-                    "version_start": low,
-                    "version_end": high,
-                    "value": serialized_value
-                })
-        
+
+                rows.append(
+                    {
+                        "key": str(key),
+                        "version_start": low,
+                        "version_end": high,
+                        "value": serialized_value,
+                    }
+                )
+
         if rows:
             filename = os.path.join(output_dir, f"{field_name}.csv")
-            with open(filename, 'w', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=["key", "version_start", "version_end", "value"])
+            with open(filename, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(
+                    f, fieldnames=["key", "version_start", "version_end", "value"]
+                )
                 writer.writeheader()
                 writer.writerows(rows)
             print(f"Saved {len(rows)} rows to {filename}")
@@ -164,7 +178,9 @@ def extract_int_range_map(blob, field_name, output_dir):
     except Exception as e:
         print(f"Error extracting {field_name}: {e}")
         import traceback
+
         traceback.print_exc()
+
 
 def extract_map(blob, field_name, output_dir):
     print(f"Extracting {field_name}...")
@@ -182,21 +198,19 @@ def extract_map(blob, field_name, output_dir):
             if isinstance(serialized_value, (list, dict)):
                 serialized_value = json.dumps(serialized_value)
 
-            rows.append({
-                "key": str(key),
-                "value": serialized_value
-            })
-            
+            rows.append({"key": str(key), "value": serialized_value})
+
         if rows:
             filename = os.path.join(output_dir, f"{field_name}.csv")
-            with open(filename, 'w', newline='', encoding='utf-8') as f:
+            with open(filename, "w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=["key", "value"])
                 writer.writeheader()
                 writer.writerows(rows)
             print(f"Saved {len(rows)} rows to {filename}")
-            
+
     except Exception as e:
         print(f"Error extracting {field_name}: {e}")
+
 
 def main():
     print("Getting DataBlob instance...")
@@ -206,11 +220,12 @@ def main():
     except Exception as e:
         print(f"Error getting DataBlob instance: {e}")
         import traceback
+
         traceback.print_exc()
         return
 
     # Fields identified from DataBlob.java
-    
+
     # IntRangeMap fields
     int_range_map_fields = [
         "diagnosisAll",
@@ -225,16 +240,11 @@ def main():
         "baseDrgDescriptions",
         "drgDescriptions",
         "mdcDescriptions",
-        "hacDescriptions"
+        "hacDescriptions",
     ]
 
     # Map fields
-    map_fields = [
-        "exclusionGroups",
-        "dxPatterns",
-        "prPatterns",
-        "schemeIndex"
-    ]
+    map_fields = ["exclusionGroups", "dxPatterns", "prPatterns", "schemeIndex"]
 
     # Ensure output directory exists
     output_dir = os.path.join(DATA_DIR, "csv")
@@ -247,6 +257,7 @@ def main():
         extract_map(blob, field, output_dir)
 
     print("Extraction complete.")
+
 
 if __name__ == "__main__":
     main()

@@ -16,6 +16,7 @@ from msdrg._native import find_data_dir, get_lib
 # Input types
 # ---------------------------------------------------------------------------
 
+
 class MceDiagnosisInput(TypedDict, total=False):
     """A diagnosis code for MCE editing."""
 
@@ -55,6 +56,7 @@ class MceInput(TypedDict, total=False):
 # Output types
 # ---------------------------------------------------------------------------
 
+
 class MceEditDetail(TypedDict):
     """A single edit that was triggered."""
 
@@ -77,6 +79,7 @@ class MceResult(TypedDict):
 # ---------------------------------------------------------------------------
 # MceEditor class
 # ---------------------------------------------------------------------------
+
 
 class MceEditor:
     """
@@ -144,8 +147,14 @@ class MceEditor:
 
     def __del__(self) -> None:
         if hasattr(self, "ctx") and self.ctx:
-            self.lib.mce_context_free(self.ctx)
-            self.ctx = None
+            import warnings
+
+            warnings.warn(
+                "MceEditor was not closed. Use 'with' or call close() explicitly.",
+                ResourceWarning,
+                stacklevel=2,
+            )
+            self.close()
 
     def close(self) -> None:
         """Explicitly free the MCE context and release resources."""
@@ -189,8 +198,6 @@ class MceEditor:
             return json.loads(result_json)
         finally:
             self.lib.msdrg_string_free(result_ptr)
-
-
 
 
 def create_mce_input(
