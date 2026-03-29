@@ -10,6 +10,7 @@ from typing import Literal, TypedDict
 
 from msdrg._json import dumps as _dumps, loads as _loads
 from msdrg._native import find_data_dir, get_lib
+from msdrg._validation import validate_mce_claim
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +190,8 @@ class MceEditor:
         """
         if not self.ctx:
             raise RuntimeError("MceEditor has been closed. Create a new instance.")
+
+        validate_mce_claim(claim)
 
         json_bytes = _dumps(claim)
 

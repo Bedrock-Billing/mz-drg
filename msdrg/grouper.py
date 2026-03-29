@@ -10,6 +10,7 @@ from typing import Literal, TypedDict
 
 from msdrg._json import dumps as _dumps, loads as _loads
 from msdrg._native import find_data_dir, get_lib
+from msdrg._validation import validate_claim
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +219,8 @@ class MsdrgGrouper:
         """
         if not self.ctx:
             raise RuntimeError("MsdrgGrouper has been closed. Create a new instance.")
+
+        validate_claim(claim_data)
 
         json_bytes = _dumps(claim_data)
 
