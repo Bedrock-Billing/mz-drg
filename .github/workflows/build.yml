@@ -2,10 +2,10 @@ name: Build & Publish
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 permissions:
   contents: read
@@ -23,9 +23,9 @@ jobs:
           - x86_64-macos
           - aarch64-macos
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -41,7 +41,7 @@ jobs:
         run: python scripts/build_wheels.py ${{ matrix.target }}
 
       - name: Upload wheel
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: wheel-${{ matrix.target }}
           path: dist/*.whl
@@ -51,9 +51,9 @@ jobs:
     name: Build sdist
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
@@ -64,7 +64,7 @@ jobs:
         run: python setup.py sdist
 
       - name: Upload sdist
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: sdist
           path: dist/*.tar.gz
@@ -75,14 +75,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Download Linux x86_64 wheel
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           name: wheel-x86_64-linux
           path: dist/
@@ -90,7 +90,7 @@ jobs:
       - name: Install wheel
         run: pip install dist/*.whl
 
-      - name: Smoke test
+      - name: Smoke test — Grouper
         working-directory: /tmp
         run: |
           python -c "
@@ -105,7 +105,34 @@ jobs:
               assert r['final_drg'] == 293, f'Expected DRG 293, got {r[\"final_drg\"]}'
               assert r['final_mdc'] == 5, f'Expected MDC 5, got {r[\"final_mdc\"]}'
               assert r['return_code'] == 'OK'
-              print(f'OK: DRG={r[\"final_drg\"]}, MDC={r[\"final_mdc\"]}')
+              print(f'Grouper OK: DRG={r[\"final_drg\"]}, MDC={r[\"final_mdc\"]}')
+          "
+
+      - name: Smoke test — MCE
+        working-directory: /tmp
+        run: |
+          python -c "
+          import msdrg
+          with msdrg.MceEditor() as mce:
+              r = mce.edit({
+                  'discharge_date': 20250101, 'age': 65, 'sex': 0,
+                  'discharge_status': 1,
+                  'pdx': {'code': 'I5020'},
+                  'sdx': [], 'procedures': []
+              })
+              assert r['edit_type'] == 'NONE', f'Expected NONE, got {r[\"edit_type\"]}'
+              print(f'MCE OK: edit_type={r[\"edit_type\"]}')
+          "
+
+      - name: Smoke test — available_versions
+        working-directory: /tmp
+        run: |
+          python -c "
+          from msdrg import MsdrgGrouper
+          versions = MsdrgGrouper.available_versions()
+          assert len(versions) == 8, f'Expected 8 versions, got {len(versions)}'
+          assert 431 in versions
+          print(f'Versions OK: {versions}')
           "
 
   publish:
@@ -120,7 +147,7 @@ jobs:
       url: https://pypi.org/p/msdrg
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v4
         with:
           pattern: "*"
           path: dist/

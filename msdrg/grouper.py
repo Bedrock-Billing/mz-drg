@@ -178,6 +178,22 @@ class MsdrgGrouper:
         status = "open" if self.ctx else "closed"
         return f"MsdrgGrouper({status})"
 
+    @staticmethod
+    def available_versions() -> list[int]:
+        """Return the list of supported MS-DRG grouper versions.
+
+        Each version corresponds to a CMS fiscal year release:
+
+        - **400/401** — FY 2023 (Oct 2022–Sep 2023)
+        - **410/411** — FY 2024 (Oct 2023–Sep 2024)
+        - **420/421** — FY 2025 (Oct 2024–Sep 2025)
+        - **430/431** — FY 2026 (Oct 2025–Sep 2026)
+
+        Even versions (400, 410, …) are the base release; odd versions
+        (401, 411, …) include mid-year updates.
+        """
+        return [400, 401, 410, 411, 420, 421, 430, 431]
+
     def __enter__(self) -> "MsdrgGrouper":
         return self
 
