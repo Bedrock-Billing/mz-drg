@@ -6,9 +6,9 @@ It can be used alongside or independently of the MS-DRG grouper.
 """
 
 import ctypes
-import json
 from typing import Literal, TypedDict
 
+from msdrg._json import dumps as _dumps, loads as _loads
 from msdrg._native import find_data_dir, get_lib
 
 
@@ -190,16 +190,24 @@ class MceEditor:
         if not self.ctx:
             raise RuntimeError("MceEditor has been closed. Create a new instance.")
 
-        json_bytes = json.dumps(claim).encode("utf-8")
+        json_bytes = _dumps(claim)
 
         result_ptr = self.lib.mce_edit_json(self.ctx, json_bytes)
 
         if not result_ptr:
-            raise RuntimeError("MCE edit failed (returned null)")
+            discharge_date = claim.get("discharge_date", "?")
+            pdx = claim.get("pdx", {})
+            pdx_code = pdx.get("code", "?") if isinstance(pdx, dict) else "?"
+            raise RuntimeError(
+                f"MCE edit failed (returned null). "
+                f"discharge_date={discharge_date}, pdx='{pdx_code}'. "
+                f"Check that the discharge_date is a valid YYYYMMDD integer "
+                f"and the PDX code is a valid ICD-10-CM code."
+            )
 
         try:
             result_json = ctypes.cast(result_ptr, ctypes.c_char_p).value.decode("utf-8")
-            return json.loads(result_json)
+            return _loads(result_json)
         finally:
             self.lib.msdrg_string_free(result_ptr)
 

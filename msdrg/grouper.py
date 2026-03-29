@@ -6,9 +6,9 @@ Zig shared library via ctypes.
 """
 
 import ctypes
-import json
 from typing import Literal, TypedDict
 
+from msdrg._json import dumps as _dumps, loads as _loads
 from msdrg._native import find_data_dir, get_lib
 
 
@@ -219,16 +219,25 @@ class MsdrgGrouper:
         if not self.ctx:
             raise RuntimeError("MsdrgGrouper has been closed. Create a new instance.")
 
-        json_bytes = json.dumps(claim_data).encode("utf-8")
+        json_bytes = _dumps(claim_data)
 
         result_ptr = self.lib.msdrg_group_json(self.ctx, json_bytes)
 
         if not result_ptr:
-            raise RuntimeError("Grouping failed (returned null)")
+            version = claim_data.get("version", "?")
+            pdx = claim_data.get("pdx", {})
+            pdx_code = pdx.get("code", "?") if isinstance(pdx, dict) else "?"
+            raise RuntimeError(
+                f"Grouping failed (returned null). "
+                f"version={version}, pdx='{pdx_code}'. "
+                f"Check that the version is supported "
+                f"({', '.join(str(v) for v in self.available_versions())}) "
+                f"and the PDX code is a valid ICD-10-CM code."
+            )
 
         try:
             result_json = ctypes.cast(result_ptr, ctypes.c_char_p).value.decode("utf-8")
-            return json.loads(result_json)
+            return _loads(result_json)
         finally:
             self.lib.msdrg_string_free(result_ptr)
 
