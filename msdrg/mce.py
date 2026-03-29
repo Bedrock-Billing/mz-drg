@@ -9,7 +9,7 @@ import ctypes
 import json
 from typing import Literal, TypedDict
 
-from msdrg.grouper import _find_library, _find_data_dir
+from msdrg._native import find_data_dir, get_lib
 
 
 # ---------------------------------------------------------------------------
@@ -116,17 +116,10 @@ class MceEditor:
         lib_path: str | None = None,
         data_dir: str | None = None,
     ) -> None:
-        if lib_path is None:
-            lib_path = _find_library()
         if data_dir is None:
-            data_dir = _find_mce_data_dir()
+            data_dir = find_data_dir()
 
-        if not hasattr(ctypes, "_mce_loaded"):
-            # Load library once (shared with MsdrgGrouper)
-            ctypes._msdrg_lib = ctypes.CDLL(lib_path)
-            ctypes._mce_loaded = True
-
-        self.lib = ctypes._msdrg_lib
+        self.lib = get_lib(lib_path)
 
         # Define MCE function signatures
         self.lib.mce_context_init.argtypes = [ctypes.c_char_p]
@@ -198,32 +191,6 @@ class MceEditor:
             self.lib.msdrg_string_free(result_ptr)
 
 
-def _find_mce_data_dir() -> str:
-    """
-    Find the MCE data directory within the installed package.
-
-    Search order:
-    1. Package's data/ directory (installed package — shared with MS-DRG)
-    2. Repository data/bin/ directory (development mode)
-    """
-    from msdrg.grouper import _get_package_dir
-
-    pkg_dir = _get_package_dir()
-
-    data_path = pkg_dir / "data"
-    if data_path.exists() and any(data_path.iterdir()):
-        return str(data_path)
-
-    dev_path = pkg_dir.parent / "data" / "bin"
-    if dev_path.exists():
-        return str(dev_path)
-
-    raise FileNotFoundError(
-        f"Could not find MCE data directory. Searched:\n"
-        f"  - {pkg_dir / 'data'}\n"
-        f"  - {dev_path}\n"
-        f"Make sure the package is installed correctly."
-    )
 
 
 def create_mce_input(

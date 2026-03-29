@@ -7,10 +7,9 @@ Zig shared library via ctypes.
 
 import ctypes
 import json
-import os
-import platform
-from pathlib import Path
 from typing import Literal, TypedDict
+
+from msdrg._native import find_data_dir, get_lib
 
 
 # ---------------------------------------------------------------------------
@@ -95,84 +94,6 @@ class GroupResult(TypedDict, total=False):
     proc_output: list[ProcedureOutput]
 
 
-# ---------------------------------------------------------------------------
-# Library discovery (private helpers)
-# ---------------------------------------------------------------------------
-
-
-def _get_package_dir() -> Path:
-    """Get the directory containing this package."""
-    return Path(__file__).parent
-
-
-def _get_lib_name() -> str:
-    """Get the platform-specific shared library name."""
-    system = platform.system()
-    if system == "Darwin":
-        return "libmsdrg.dylib"
-    elif system == "Windows":
-        return "msdrg.dll"
-    else:
-        return "libmsdrg.so"
-
-
-def _find_library() -> str:
-    """
-    Find the shared library within the installed package.
-
-    Search order:
-    1. Package's _lib/ directory (installed package)
-    2. Zig build output (development mode)
-    """
-    pkg_dir = _get_package_dir()
-    lib_name = _get_lib_name()
-
-    lib_path = pkg_dir / "_lib" / lib_name
-    if lib_path.exists():
-        return str(lib_path)
-
-    dev_path = pkg_dir.parent / "zig_src" / "zig-out" / "lib" / lib_name
-    if dev_path.exists():
-        return str(dev_path)
-
-    dev_bin_path = pkg_dir.parent / "zig_src" / "zig-out" / "bin" / lib_name
-    if dev_bin_path.exists():
-        return str(dev_bin_path)
-
-    raise FileNotFoundError(
-        f"Could not find {lib_name}. Searched:\n"
-        f"  - {pkg_dir / '_lib' / lib_name}\n"
-        f"  - {dev_path}\n"
-        f"  - {dev_bin_path}\n"
-        f"Make sure the package is installed correctly or run 'zig build' in zig_src/."
-    )
-
-
-def _find_data_dir() -> str:
-    """
-    Find the data directory within the installed package.
-
-    Search order:
-    1. Package's data/ directory (installed package)
-    2. Repository data/bin/ directory (development mode)
-    """
-    pkg_dir = _get_package_dir()
-
-    data_path = pkg_dir / "data"
-    if data_path.exists() and any(data_path.iterdir()):
-        return str(data_path)
-
-    dev_path = pkg_dir.parent / "data" / "bin"
-    if dev_path.exists():
-        return str(dev_path)
-
-    raise FileNotFoundError(
-        f"Could not find data directory. Searched:\n"
-        f"  - {pkg_dir / 'data'}\n"
-        f"  - {dev_path}\n"
-        f"Make sure the package is installed correctly."
-    )
-
 
 # ---------------------------------------------------------------------------
 # Main grouper class
@@ -214,15 +135,10 @@ class MsdrgGrouper:
         lib_path: str | None = None,
         data_dir: str | None = None,
     ) -> None:
-        if lib_path is None:
-            lib_path = _find_library()
         if data_dir is None:
-            data_dir = _find_data_dir()
+            data_dir = find_data_dir()
 
-        if not os.path.exists(lib_path):
-            raise FileNotFoundError(f"Library not found at {lib_path}")
-
-        self.lib = ctypes.CDLL(lib_path)
+        self.lib = get_lib(lib_path)
 
         self.lib.msdrg_context_init.argtypes = [ctypes.c_char_p]
         self.lib.msdrg_context_init.restype = ctypes.c_void_p
