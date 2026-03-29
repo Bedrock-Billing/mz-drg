@@ -210,7 +210,8 @@ def create_mce_input(
     sex: Literal[0, 1, 2],
     discharge_status: int,
     pdx: str,
-    sdx: list[str] | None = None,
+    pdx_poa: str | None = None,
+    sdx: list[str] | list[tuple[str, str]] | None = None,
     procedures: list[str] | None = None,
 ) -> MceInput:
     """
@@ -220,20 +221,34 @@ def create_mce_input(
         discharge_date: YYYYMMDD integer (e.g. 20250101)
         age: Patient age in years
         sex: 0=Male, 1=Female, 2=Unknown
-        discharge_status: 1=Home/Self Care, 20=Died
+        discharge_status: CMS discharge status code (e.g. 1=Home, 20=Died)
         pdx: Principal diagnosis code
-        sdx: Secondary diagnosis codes
+        pdx_poa: POA indicator for the PDX ("Y", "N", "U", "W", or None)
+        sdx: Secondary diagnoses — strings ("I5020") or tuples ("I5020", "Y")
+             for POA support
         procedures: Procedure codes
 
     Returns:
         An ``MceInput`` dict ready for ``MceEditor.edit()``
     """
+    pdx_dict: MceDiagnosisInput = {"code": pdx}
+    if pdx_poa is not None:
+        pdx_dict["poa"] = pdx_poa
+
+    sdx_list: list[MceDiagnosisInput] = []
+    for item in sdx or []:
+        if isinstance(item, tuple):
+            sdx_list.append({"code": item[0], "poa": item[1]})
+        else:
+            sdx_list.append({"code": item})
+
     return {
         "discharge_date": discharge_date,
         "age": age,
         "sex": sex,
         "discharge_status": discharge_status,
-        "pdx": {"code": pdx},
-        "sdx": [{"code": c} for c in (sdx or [])],
+        "pdx": pdx_dict,
+        "sdx": sdx_list,
         "procedures": [{"code": c} for c in (procedures or [])],
     }
+
