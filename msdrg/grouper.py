@@ -174,6 +174,10 @@ class MsdrgGrouper:
             self.lib.msdrg_context_free(self.ctx)
             self.ctx = None
 
+    def __repr__(self) -> str:
+        status = "open" if self.ctx else "closed"
+        return f"MsdrgGrouper({status})"
+
     def __enter__(self) -> "MsdrgGrouper":
         return self
 

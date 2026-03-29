@@ -162,6 +162,10 @@ class MceEditor:
             self.lib.mce_context_free(self.ctx)
             self.ctx = None
 
+    def __repr__(self) -> str:
+        status = "open" if self.ctx else "closed"
+        return f"MceEditor({status})"
+
     def __enter__(self) -> "MceEditor":
         return self
 
