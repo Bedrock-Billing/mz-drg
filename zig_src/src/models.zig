@@ -199,10 +199,30 @@ pub const Attribute = struct {
     list_name: []const u8,
     prefix: AttributePrefix = .NONE,
     mdc_suppression: std.bit_set.IntegerBitSet(32) = std.bit_set.IntegerBitSet(32).initEmpty(),
-    // Add other fields if needed (e.g., prefix, is_negative)
 
     pub fn eql(self: Attribute, other: Attribute) bool {
         return std.mem.eql(u8, self.list_name, other.list_name) and self.prefix == other.prefix;
+    }
+
+    /// Zero-allocation comparison: checks if this attribute matches the given string.
+    /// For NONE prefix, compares directly against list_name.
+    /// For prefixed attributes (PDX:x, ONLY:x), builds on stack buffer.
+    pub fn matchesString(self: Attribute, str: []const u8) bool {
+        if (self.prefix == .NONE) {
+            return std.mem.eql(u8, self.list_name, str);
+        }
+        const prefix_str = switch (self.prefix) {
+            .PDX => "PDX",
+            .ONLY => "ONLY",
+            .NONE => unreachable,
+        };
+        var buf: [128]u8 = undefined;
+        if (prefix_str.len + 1 + self.list_name.len > buf.len) return false;
+        @memcpy(buf[0..prefix_str.len], prefix_str);
+        buf[prefix_str.len] = ':';
+        @memcpy(buf[prefix_str.len + 1 ..][0..self.list_name.len], self.list_name);
+        const expected = buf[0 .. prefix_str.len + 1 + self.list_name.len];
+        return std.mem.eql(u8, expected, str);
     }
 
     pub fn toString(self: Attribute, allocator: std.mem.Allocator) ![]u8 {

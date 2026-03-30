@@ -127,9 +127,7 @@ pub const InitialDiagnosisMarking = struct {
                     }
 
                     for (sdx.attributes.items) |a| {
-                        const s = try a.toString(allocator);
-                        defer allocator.free(s);
-                        if (std.mem.eql(u8, s, check_str)) {
+                        if (a.matchesString(check_str)) {
                             has_attr = true;
                             matched_attr_obj = a;
                             break;
@@ -137,9 +135,7 @@ pub const InitialDiagnosisMarking = struct {
                     }
                     if (!has_attr) {
                         for (sdx.dx_cat_attributes.items) |a| {
-                            const s = try a.toString(allocator);
-                            defer allocator.free(s);
-                            if (std.mem.eql(u8, s, check_str)) {
+                            if (a.matchesString(check_str)) {
                                 has_attr = true;
                                 matched_attr_obj = a;
                                 break;
@@ -196,11 +192,9 @@ fn markProcedure(proc: *models.ProcedureCode) void {
     }
 }
 
-fn hasAttribute(proc: *models.ProcedureCode, attr_str: []const u8, allocator: std.mem.Allocator) !bool {
+fn hasAttribute(proc: *models.ProcedureCode, attr_str: []const u8) bool {
     for (proc.attributes.items) |attr| {
-        const s = try attr.toString(allocator);
-        defer allocator.free(s);
-        if (std.mem.eql(u8, s, attr_str)) return true;
+        if (attr.matchesString(attr_str)) return true;
     }
     return false;
 }
@@ -219,9 +213,9 @@ fn hasAttributes(proc: *models.ProcedureCode, required: []const []const u8) bool
     return true;
 }
 
-fn hasAllAttributes(proc: *models.ProcedureCode, required: [][]const u8, allocator: std.mem.Allocator) !bool {
+fn hasAllAttributes(proc: *models.ProcedureCode, required: [][]const u8) bool {
     for (required) |req| {
-        if (!(try hasAttribute(proc, req, allocator))) return false;
+        if (!hasAttribute(proc, req)) return false;
     }
     return true;
 }
@@ -325,7 +319,7 @@ pub const InitialProcedureMarking = struct {
                     if (!proc.is(.FIRST_POSITION)) continue;
                     if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
 
-                    if (try hasAllAttributes(proc, proc_attributes.items, allocator)) {
+                    if (hasAllAttributes(proc, proc_attributes.items)) {
                         std.log.debug("InitialProcedureMarking: Marking first position procedure {s}", .{proc.value.toSlice()});
                         markProcedure(proc);
                         one_proc_found = true;
@@ -337,7 +331,7 @@ pub const InitialProcedureMarking = struct {
                 if (!one_proc_found) {
                     for (data.procedure_codes.items) |*proc| {
                         if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                        if (try hasAllAttributes(proc, proc_attributes.items, allocator)) {
+                        if (hasAllAttributes(proc, proc_attributes.items)) {
                             std.log.debug("InitialProcedureMarking: Marking procedure {s}", .{proc.value.toSlice()});
                             markProcedure(proc);
                             one_proc_found = true;
@@ -349,7 +343,7 @@ pub const InitialProcedureMarking = struct {
                 // 3. Check Clusters
                 if (!one_proc_found) {
                     for (data.clusters.items) |*cluster| {
-                        if (try hasAllAttributes(cluster, proc_attributes.items, allocator)) {
+                        if (hasAllAttributes(cluster, proc_attributes.items)) {
                             std.log.debug("InitialProcedureMarking: Marking cluster {s}", .{cluster.value.toSlice()});
                             // Mark all procs in cluster
                             var proc_values = std.StringHashMap(void).init(allocator);
@@ -384,7 +378,7 @@ pub const InitialProcedureMarking = struct {
 
                             for (data.procedure_codes.items) |*proc| {
                                 if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                                if (try hasAttribute(proc, attr_str, allocator)) {
+                                if (hasAttribute(proc, attr_str)) {
                                     try proc_codes_with_attr.append(allocator, proc);
                                 }
                             }
@@ -393,13 +387,13 @@ pub const InitialProcedureMarking = struct {
                             defer cluster_codes_with_attr.deinit(allocator);
 
                             for (data.clusters.items) |*cluster| {
-                                if (try hasAttribute(cluster, attr_str, allocator)) {
+                                if (hasAttribute(cluster, attr_str)) {
                                     try cluster_codes_with_attr.append(allocator, cluster);
                                 }
                             }
                             if (proc_codes_with_attr.items.len > 0 and cluster_codes_with_attr.items.len > 0) {
                                 if (data.principal_proc) |*pp| {
-                                    if (try hasAttribute(pp, attr_str, allocator)) {
+                                    if (hasAttribute(pp, attr_str)) {
                                         markProcedure(pp);
                                         continue :attr_loop;
                                     }
@@ -415,21 +409,21 @@ pub const InitialProcedureMarking = struct {
                         var count: usize = 0;
                         for (data.procedure_codes.items) |*proc| {
                             if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                            if (try hasAttribute(proc, attr_str, allocator)) {
+                            if (hasAttribute(proc, attr_str)) {
                                 count += 1;
                             }
                         }
 
                         if (count >= 2) {
                             if (data.principal_proc) |*pp| {
-                                if (!pp.mdc_suppression.isSet(@intCast(mdc)) and try hasAttribute(pp, attr_str, allocator)) {
+                                if (!pp.mdc_suppression.isSet(@intCast(mdc)) and hasAttribute(pp, attr_str)) {
                                     markProcedure(pp);
                                     continue :attr_loop;
                                 }
                             }
                             for (data.procedure_codes.items) |*proc| {
                                 if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                                if (try hasAttribute(proc, attr_str, allocator)) {
+                                if (hasAttribute(proc, attr_str)) {
                                     markProcedure(proc);
                                     continue :attr_loop; // Java breaks block0, which is the attribute loop
                                 }
@@ -441,7 +435,7 @@ pub const InitialProcedureMarking = struct {
                         var match_found = false;
                         for (data.procedure_codes.items) |*proc| {
                             if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                            if (try hasAttribute(proc, attr_str, allocator)) {
+                            if (hasAttribute(proc, attr_str)) {
                                 markProcedure(proc);
                                 match_found = true;
                                 break;
@@ -451,7 +445,7 @@ pub const InitialProcedureMarking = struct {
 
                         // Cluster Match
                         for (data.clusters.items) |*cluster| {
-                            if (try hasAttribute(cluster, attr_str, allocator)) {
+                            if (hasAttribute(cluster, attr_str)) {
                                 var proc_values = std.StringHashMap(void).init(allocator);
                                 defer proc_values.deinit();
 
@@ -621,9 +615,7 @@ pub const FinalDiagnosisMarking = struct {
                     }
 
                     for (sdx.attributes.items) |a| {
-                        const s = try a.toString(allocator);
-                        defer allocator.free(s);
-                        if (std.mem.eql(u8, s, check_str)) {
+                        if (a.matchesString(check_str)) {
                             has_attr = true;
                             matched_attr_obj = a;
                             break;
@@ -631,9 +623,7 @@ pub const FinalDiagnosisMarking = struct {
                     }
                     if (!has_attr) {
                         for (sdx.dx_cat_attributes.items) |a| {
-                            const s = try a.toString(allocator);
-                            defer allocator.free(s);
-                            if (std.mem.eql(u8, s, check_str)) {
+                            if (a.matchesString(check_str)) {
                                 has_attr = true;
                                 matched_attr_obj = a;
                                 break;
@@ -809,7 +799,7 @@ pub const FinalProcedureMarking = struct {
                     if (!proc.is(.FIRST_POSITION)) continue;
                     if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
 
-                    if (try hasAllAttributes(proc, proc_attributes.items, allocator)) {
+                    if (hasAllAttributes(proc, proc_attributes.items)) {
                         proc.mark(.MARKED_FOR_FINAL);
                         if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
                         if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
@@ -822,7 +812,7 @@ pub const FinalProcedureMarking = struct {
                 if (!one_proc_found) {
                     for (data.procedure_codes.items) |*proc| {
                         if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                        if (try hasAllAttributes(proc, proc_attributes.items, allocator)) {
+                        if (hasAllAttributes(proc, proc_attributes.items)) {
                             proc.mark(.MARKED_FOR_FINAL);
                             if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
                             if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
@@ -835,7 +825,7 @@ pub const FinalProcedureMarking = struct {
                 // 3. Check Clusters
                 if (!one_proc_found) {
                     for (data.clusters.items) |*cluster| {
-                        if (try hasAllAttributes(cluster, proc_attributes.items, allocator)) {
+                        if (hasAllAttributes(cluster, proc_attributes.items)) {
                             var proc_values = std.StringHashMap(void).init(allocator);
                             defer proc_values.deinit();
 
@@ -869,7 +859,7 @@ pub const FinalProcedureMarking = struct {
 
                             for (data.procedure_codes.items) |*proc| {
                                 if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                                if (try hasAttribute(proc, attr_str, allocator)) {
+                                if (hasAttribute(proc, attr_str)) {
                                     try proc_codes_with_attr.append(allocator, proc);
                                 }
                             }
@@ -878,13 +868,13 @@ pub const FinalProcedureMarking = struct {
                             defer cluster_codes_with_attr.deinit(allocator);
 
                             for (data.clusters.items) |*cluster| {
-                                if (try hasAttribute(cluster, attr_str, allocator)) {
+                                if (hasAttribute(cluster, attr_str)) {
                                     try cluster_codes_with_attr.append(allocator, cluster);
                                 }
                             }
                             if (proc_codes_with_attr.items.len > 0 and cluster_codes_with_attr.items.len > 0) {
                                 if (data.principal_proc) |*pp| {
-                                    if (try hasAttribute(pp, attr_str, allocator)) {
+                                    if (hasAttribute(pp, attr_str)) {
                                         pp.mark(.MARKED_FOR_FINAL);
                                         if (pp.drg_impact == .INITIAL) pp.drg_impact = .BOTH;
                                         if (pp.drg_impact == .NONE) pp.drg_impact = .FINAL;
@@ -904,14 +894,14 @@ pub const FinalProcedureMarking = struct {
                         var count: usize = 0;
                         for (data.procedure_codes.items) |*proc| {
                             if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                            if (try hasAttribute(proc, attr_str, allocator)) {
+                            if (hasAttribute(proc, attr_str)) {
                                 count += 1;
                             }
                         }
 
                         if (count >= 2) {
                             if (data.principal_proc) |*pp| {
-                                if (!pp.mdc_suppression.isSet(@intCast(mdc)) and try hasAttribute(pp, attr_str, allocator)) {
+                                if (!pp.mdc_suppression.isSet(@intCast(mdc)) and hasAttribute(pp, attr_str)) {
                                     pp.mark(.MARKED_FOR_FINAL);
                                     if (pp.drg_impact == .INITIAL) pp.drg_impact = .BOTH;
                                     if (pp.drg_impact == .NONE) pp.drg_impact = .FINAL;
@@ -920,7 +910,7 @@ pub const FinalProcedureMarking = struct {
                             }
                             for (data.procedure_codes.items) |*proc| {
                                 if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                                if (try hasAttribute(proc, attr_str, allocator)) {
+                                if (hasAttribute(proc, attr_str)) {
                                     proc.mark(.MARKED_FOR_FINAL);
                                     if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
                                     if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
@@ -933,7 +923,7 @@ pub const FinalProcedureMarking = struct {
                         var match_found = false;
                         for (data.procedure_codes.items) |*proc| {
                             if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                            if (try hasAttribute(proc, attr_str, allocator)) {
+                            if (hasAttribute(proc, attr_str)) {
                                 proc.mark(.MARKED_FOR_FINAL);
                                 if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
                                 if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
@@ -944,7 +934,7 @@ pub const FinalProcedureMarking = struct {
                         if (match_found) continue :attr_loop;
 
                         for (data.clusters.items) |*cluster| {
-                            if (try hasAttribute(cluster, attr_str, allocator)) {
+                            if (hasAttribute(cluster, attr_str)) {
                                 var proc_values = std.StringHashMap(void).init(allocator);
                                 defer proc_values.deinit();
 
