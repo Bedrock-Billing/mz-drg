@@ -430,58 +430,63 @@ class MsdrgGrouper:
         inp = self.lib.msdrg_input_create()
         if not inp:
             raise RuntimeError("Failed to create native input handle")
-
-        # Demographics
-        self.lib.msdrg_input_set_demographics(
-            inp,
-            claim_data.get("age", 0),
-            claim_data.get("sex", 2),
-            claim_data.get("discharge_status", 0),
-        )
-
-        # Hospital status
-        hs = claim_data.get("hospital_status")
-        if hs is not None:
-            self.lib.msdrg_input_set_hospital_status(
-                inp, _HOSPITAL_STATUS_MAP.get(hs, 1)
+        try:
+            # Demographics
+            self.lib.msdrg_input_set_demographics(
+                inp,
+                claim_data.get("age", 0),
+                claim_data.get("sex", 2),
+                claim_data.get("discharge_status", 0),
             )
 
-        # Tie breaker
-        tb = claim_data.get("tie_breaker")
-        if tb is not None:
-            self.lib.msdrg_input_set_tie_breaker(inp, _TIE_BREAKER_MAP.get(tb, 0))
+            # Hospital status
+            hs = claim_data.get("hospital_status")
+            if hs is not None:
+                self.lib.msdrg_input_set_hospital_status(
+                    inp, _HOSPITAL_STATUS_MAP.get(hs, 1)
+                )
 
-        # PDX
-        pdx = claim_data.get("pdx")
-        if pdx:
-            if not self.lib.msdrg_input_set_pdx(
-                inp, pdx["code"].encode("utf-8"), _poa_byte(pdx.get("poa"))
-            ):
-                raise ValueError(f"Invalid PDX code: {pdx['code']}")
+            # Tie breaker
+            tb = claim_data.get("tie_breaker")
+            if tb is not None:
+                self.lib.msdrg_input_set_tie_breaker(inp, _TIE_BREAKER_MAP.get(tb, 0))
 
-        # Admit DX
-        admit_dx = claim_data.get("admit_dx")
-        if admit_dx:
-            if not self.lib.msdrg_input_set_admit_dx(
-                inp, admit_dx["code"].encode("utf-8"), _poa_byte(admit_dx.get("poa"))
-            ):
-                raise ValueError(f"Invalid admit DX code: {admit_dx['code']}")
+            # PDX
+            pdx = claim_data.get("pdx")
+            if pdx:
+                if not self.lib.msdrg_input_set_pdx(
+                    inp, pdx["code"].encode("utf-8"), _poa_byte(pdx.get("poa"))
+                ):
+                    raise ValueError(f"Invalid PDX code: {pdx['code']}")
 
-        # Secondary diagnoses
-        for sdx in claim_data.get("sdx", []):
-            if not self.lib.msdrg_input_add_sdx(
-                inp, sdx["code"].encode("utf-8"), _poa_byte(sdx.get("poa"))
-            ):
-                raise ValueError(f"Invalid SDX code: {sdx['code']}")
+            # Admit DX
+            admit_dx = claim_data.get("admit_dx")
+            if admit_dx:
+                if not self.lib.msdrg_input_set_admit_dx(
+                    inp,
+                    admit_dx["code"].encode("utf-8"),
+                    _poa_byte(admit_dx.get("poa")),
+                ):
+                    raise ValueError(f"Invalid admit DX code: {admit_dx['code']}")
 
-        # Procedures
-        for proc in claim_data.get("procedures", []):
-            if not self.lib.msdrg_input_add_procedure(
-                inp, proc["code"].encode("utf-8")
-            ):
-                raise ValueError(f"Invalid procedure code: {proc['code']}")
+            # Secondary diagnoses
+            for sdx in claim_data.get("sdx", []):
+                if not self.lib.msdrg_input_add_sdx(
+                    inp, sdx["code"].encode("utf-8"), _poa_byte(sdx.get("poa"))
+                ):
+                    raise ValueError(f"Invalid SDX code: {sdx['code']}")
 
-        return inp
+            # Procedures
+            for proc in claim_data.get("procedures", []):
+                if not self.lib.msdrg_input_add_procedure(
+                    inp, proc["code"].encode("utf-8")
+                ):
+                    raise ValueError(f"Invalid procedure code: {proc['code']}")
+
+            return inp
+        except Exception:
+            self.lib.msdrg_input_free(inp)
+            raise
 
     def _read_result(self, result_ptr: int) -> GroupResult:
         """Read all fields from a MsdrgResult handle into a GroupResult dict."""
