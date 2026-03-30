@@ -29,6 +29,10 @@ dependencies = []
 dev = [
     "ruff>=0.15.7",
     "pytest",
+    "jpype1"
+]
+prod = [
+    "orjson>=3.11.7",
 ]
 
 [project.urls]

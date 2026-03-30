@@ -29,7 +29,6 @@ PROJECT_ROOT = str(Path(__file__).parent.parent)
 sys.path.insert(0, PROJECT_ROOT)
 sys.path.insert(0, os.path.join(PROJECT_ROOT, "msdrg"))
 
-import msdrg
 
 JARS_DIR = os.path.join(PROJECT_ROOT, "jars")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data", "bin")
@@ -313,7 +312,8 @@ def benchmark_zig(claims, icd_version=10):
             }
         mce_input["sdx"] = [
             {"code": s.get("code", ""), "poa": s.get("poa", "Y")}
-            for s in claim.get("sdx", []) if s
+            for s in claim.get("sdx", [])
+            if s
         ]
         mce_input["procedures"] = [
             {"code": p.get("code", "") if isinstance(p, dict) else p}
@@ -454,9 +454,13 @@ def main():
             speedup = java_duration / zig_duration
             print(f"  Zig:    {zig_duration:.3f}s")
             print(f"  Java:   {java_duration:.3f}s")
-            print(f"  Speedup: {speedup:.1f}x {'(Zig faster)' if speedup > 1 else '(Java faster)'}")
+            print(
+                f"  Speedup: {speedup:.1f}x {'(Zig faster)' if speedup > 1 else '(Java faster)'}"
+            )
     else:
-        print(f"Running {len(claims)} claims through Java CMS MCE and Zig mz-drg MCE...")
+        print(
+            f"Running {len(claims)} claims through Java CMS MCE and Zig mz-drg MCE..."
+        )
         print()
 
         stats, mismatches = run_comparison(claims, args.icd_version, args.verbose)

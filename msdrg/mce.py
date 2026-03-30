@@ -262,4 +262,3 @@ def create_mce_input(
         "sdx": sdx_list,
         "procedures": [{"code": c} for c in (procedures or [])],
     }
-

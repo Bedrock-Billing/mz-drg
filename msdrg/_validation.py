@@ -36,7 +36,7 @@ def _check_diagnosis(value: Any, field: str) -> None:
     """Raise if *value* is not a valid diagnosis dict."""
     if not isinstance(value, dict):
         raise ValueError(
-            f"'{field}' must be a dict like {{\"code\": \"I5020\"}}, "
+            f'\'{field}\' must be a dict like {{"code": "I5020"}}, '
             f"got {type(value).__name__}: {value!r}"
         )
     if "code" not in value:
@@ -69,7 +69,7 @@ def _check_procedure_list(value: Any, field: str) -> None:
     for i, item in enumerate(value):
         if not isinstance(item, dict):
             raise ValueError(
-                f"'{field}[{i}]' must be a dict like {{\"code\": \"02703DZ\"}}, "
+                f'\'{field}[{i}]\' must be a dict like {{"code": "02703DZ"}}, '
                 f"got {type(item).__name__}: {item!r}"
             )
         if "code" not in item:
@@ -85,9 +85,7 @@ def validate_claim(claim: dict[str, Any]) -> None:
         ValueError: With a clear message identifying the invalid field.
     """
     if not isinstance(claim, dict):
-        raise ValueError(
-            f"Claim must be a dict, got {type(claim).__name__}"
-        )
+        raise ValueError(f"Claim must be a dict, got {type(claim).__name__}")
 
     # Required fields
     if "pdx" not in claim:
@@ -125,9 +123,7 @@ def validate_mce_claim(claim: dict[str, Any]) -> None:
         ValueError: With a clear message identifying the invalid field.
     """
     if not isinstance(claim, dict):
-        raise ValueError(
-            f"Claim must be a dict, got {type(claim).__name__}"
-        )
+        raise ValueError(f"Claim must be a dict, got {type(claim).__name__}")
 
     # Required fields
     if "pdx" not in claim:

@@ -205,6 +205,20 @@ fn hasAttribute(proc: *models.ProcedureCode, attr_str: []const u8, allocator: st
     return false;
 }
 
+fn hasAttributes(proc: *models.ProcedureCode, required: []const []const u8) bool {
+    for (required) |req| {
+        var found = false;
+        for (proc.attributes.items) |attr| {
+            if (attr.prefix == .NONE and std.mem.eql(u8, attr.list_name, req)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
 fn hasAllAttributes(proc: *models.ProcedureCode, required: [][]const u8, allocator: std.mem.Allocator) !bool {
     for (required) |req| {
         if (!(try hasAttribute(proc, req, allocator))) return false;
@@ -1159,8 +1173,10 @@ pub const FinalDxFunctionMarking = struct {
 const STENTS = [_][]const u8{ "stent1", "stent2", "stent3", "stent4" };
 const VESSELS = [_][]const u8{ "vessel1", "vessel2", "vessel3", "vessel4" };
 const ARTERIAL = "arterial";
-const NOR_DRUG_STENT = "nordrugstent";
-const NOR_STENT = "norstent";
+const NOR_DRUG_STENT = "NORdrugstent";
+const NOR_STENT = "NORstent";
+const ARTERIAL_AND_NOR_DRUG_STENT = [_][]const u8{ ARTERIAL, NOR_DRUG_STENT };
+const ARTERIAL_AND_NOR_STENT = [_][]const u8{ ARTERIAL, NOR_STENT };
 
 fn markStents(matched_attributes: *std.StringHashMap(void), proc_codes: []models.ProcedureCode, mark_flag: models.CodeFlag, impact: models.GroupingImpact) void {
     var has_stent = false;
@@ -1172,14 +1188,35 @@ fn markStents(matched_attributes: *std.StringHashMap(void), proc_codes: []models
     }
 
     if (has_stent) {
+        // Phase 1: Mark all STENT_4 procedures
         for (proc_codes) |*proc| {
             if (!proc.is(.STENT_4)) continue;
             proc.mark(mark_flag);
             proc.drg_impact = updateImpact(proc.drg_impact, impact);
         }
 
-        // TODO: Implement detailed ARTERIAL/NOR_DRUG_STENT logic if needed
+        // Phase 2: Secondary marking — if the formula matched arterial+nordrugstent
+        // (or arterial+norstent), also mark any procedure that has BOTH attributes
+        // even if it doesn't have the STENT_4 flag.
+        if (matched_attributes.contains(ARTERIAL) and matched_attributes.contains(NOR_DRUG_STENT)) {
+            for (proc_codes) |*proc| {
+                if (proc.is(mark_flag)) continue; // already marked
+                if (hasAttributes(proc, &ARTERIAL_AND_NOR_DRUG_STENT)) {
+                    proc.mark(mark_flag);
+                    proc.drg_impact = updateImpact(proc.drg_impact, impact);
+                }
+            }
+        } else if (matched_attributes.contains(ARTERIAL) and matched_attributes.contains(NOR_STENT)) {
+            for (proc_codes) |*proc| {
+                if (proc.is(mark_flag)) continue; // already marked
+                if (hasAttributes(proc, &ARTERIAL_AND_NOR_STENT)) {
+                    proc.mark(mark_flag);
+                    proc.drg_impact = updateImpact(proc.drg_impact, impact);
+                }
+            }
+        }
 
+        // Phase 3: Cleanup matched attributes
         for (STENTS) |s| _ = matched_attributes.remove(s);
         _ = matched_attributes.remove(ARTERIAL);
         _ = matched_attributes.remove(NOR_DRUG_STENT);

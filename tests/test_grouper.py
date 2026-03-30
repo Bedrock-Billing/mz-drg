@@ -357,16 +357,21 @@ class TestCApiEdgeCases:
     def test_invalid_sex_clamped(self, grouper: MsdrgGrouper):
         """sex=99 is out of range — C API should clamp, not produce UB.
         should be caught by python validation"""
-        with pytest.raises(ValueError, match=re.escape("'sex' must be 0 (Male), 1 (Female), or 2 (Unknown), got 99")):
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "'sex' must be 0 (Male), 1 (Female), or 2 (Unknown), got 99"
+            ),
+        ):
             grouper.group(
                 {
                     "version": 431,
                     "age": 65,
                     "sex": 99,
-                "discharge_status": 1,
-                "pdx": {"code": "I5020"},
-            }
-        )
+                    "discharge_status": 1,
+                    "pdx": {"code": "I5020"},
+                }
+            )
 
     def test_invalid_discharge_status_clamped(self, grouper: MsdrgGrouper):
         """discharge_status=999 is out of range — should clamp, not crash."""
@@ -384,16 +389,21 @@ class TestCApiEdgeCases:
     def test_negative_sex_clamped(self, grouper: MsdrgGrouper):
         """sex=-1 is out of range — should clamp.
         should be caught by python validation"""
-        with pytest.raises(ValueError, match=re.escape("'sex' must be 0 (Male), 1 (Female), or 2 (Unknown), got -1")):
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "'sex' must be 0 (Male), 1 (Female), or 2 (Unknown), got -1"
+            ),
+        ):
             grouper.group(
                 {
                     "version": 431,
                     "age": 65,
                     "sex": -1,
-                "discharge_status": 1,
-                "pdx": {"code": "I5020"},
-            }
-        )
+                    "discharge_status": 1,
+                    "pdx": {"code": "I5020"},
+                }
+            )
 
     def test_multiple_groups_no_leak(self, grouper: MsdrgGrouper):
         """Call group() many times — if arena cleanup is wrong, RSS grows."""
