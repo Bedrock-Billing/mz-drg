@@ -4,6 +4,42 @@ All notable changes to this project are documented here. This project adheres to
 
 ---
 
+## v0.1.6 — 2026-03-30
+
+### Added
+
+- :sparkles: **Structured C API** — the C ABI now exposes a full structured API for building inputs and reading results without JSON serialization. This enables high-performance integration from C, C++, Rust, and other FFI-capable languages.
+
+  **Input functions:**
+  - `msdrg_input_create()` / `msdrg_input_free()` — opaque input handle
+  - `msdrg_input_set_pdx()`, `msdrg_input_set_admit_dx()`, `msdrg_input_add_sdx()`, `msdrg_input_add_procedure()` — set claim codes
+  - `msdrg_input_set_demographics()` — set age, sex, discharge status
+  - `msdrg_input_set_hospital_status()` — set hospital status (EXEMPT/NOT_EXEMPT/UNKNOWN)
+
+  **Version functions:**
+  - `msdrg_version_create()` / `msdrg_version_free()` — create reusable version handle
+
+  **Execution:**
+  - `msdrg_group(version, input)` — execute grouping, returns opaque result handle
+
+  **Result getters (47 total):**
+  - Scalar: `msdrg_result_get_{initial,final}_{drg,mdc}`, `msdrg_result_get_return_code[_name]`
+  - Descriptions: `msdrg_result_get_{initial,final}_{drg,mdc}_description`
+  - PDX: `msdrg_result_has_pdx`, `msdrg_result_get_pdx_{code,mdc,severity,drg_impact,poa_error,flags}`
+  - SDX: `msdrg_result_get_sdx_{count,code,mdc,severity,drg_impact,poa_error,flags}`
+  - Procedures: `msdrg_result_get_proc_{count,code,is_or,drg_impact,is_valid,flags}`
+  - `msdrg_result_free()` — release result
+
+- :sparkles: **Auto-generated C header** — `zig build` now emits `zig-out/include/msdrg.h` with all 47 exported function declarations, `extern "C"` guards, and opaque handle typedefs. No manual synchronization required.
+
+- :sparkles: **Python `group_structured()` method** — exposes the structured API path from Python for use cases that prefer direct FFI calls over JSON serialization. The default `group()` method continues to use the JSON path (faster for Python due to single FFI crossing).
+
+### Changed
+
+- Hospital status is now exposed per-request in the structured API (`msdrg_input_set_hospital_status`) rather than only through JSON parsing
+
+---
+
 ## v0.1.5 — 2026-03-29
 
 ### Added

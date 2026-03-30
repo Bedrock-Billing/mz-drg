@@ -335,21 +335,51 @@ python tests/compare_groupers.py --file tests/claims.json --benchmark
 
 ## C API
 
-mz-drg exposes a C ABI for integration with any language.
+mz-drg exposes a C ABI for integration with any language. A complete header is auto-generated at `zig-out/include/msdrg.h` after building.
 
-### MS-DRG Grouper
+### JSON API (simple — single call)
 
 ```c
+#include "msdrg.h"
+
 void* ctx = msdrg_context_init("/path/to/data/bin");
 const char* result = msdrg_group_json(ctx, "{\"version\":431,...}");
 msdrg_string_free(result);
 msdrg_context_free(ctx);
 ```
 
+### Structured API (no JSON — fine-grained control)
+
+```c
+#include "msdrg.h"
+
+MsdrgContext ctx = msdrg_context_init("/path/to/data/bin");
+MsdrgVersion ver = msdrg_version_create(ctx, 431);
+MsdrgInput inp = msdrg_input_create();
+
+msdrg_input_set_pdx(inp, "I5020", 'Y');
+msdrg_input_add_sdx(inp, "E1165", 'Y');
+msdrg_input_set_demographics(inp, 65, 0, 1);
+
+MsdrgResult res = msdrg_group(ver, inp);
+int32_t drg = msdrg_result_get_final_drg(res);
+int32_t mdc = msdrg_result_get_final_mdc(res);
+const char* desc = msdrg_result_get_final_drg_description(res);
+
+msdrg_result_free(res);
+msdrg_input_free(inp);
+msdrg_version_free(ver);
+msdrg_context_free(ctx);
+```
+
+The structured API gives C/C++/Rust callers direct access to all 47 result fields without JSON parsing overhead. For Python, the JSON API (`group()`) is faster due to fewer FFI crossings. See `zig-out/include/msdrg.h` for the full function reference.
+
 ### MCE Editor
 
 ```c
-void* mce = mce_context_init("/path/to/data/bin");
+#include "msdrg.h"
+
+MceContext mce = mce_context_init("/path/to/data/bin");
 const char* result = mce_edit_json(mce, "{\"discharge_date\":20250101,...}");
 msdrg_string_free(result);
 mce_context_free(mce);

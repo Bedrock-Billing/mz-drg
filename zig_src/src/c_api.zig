@@ -1,6 +1,7 @@
 const std = @import("std");
 const msdrg = @import("msdrg.zig");
 const models = @import("models.zig");
+const common = @import("common.zig");
 const chain = @import("chain.zig");
 const json_api = @import("json_api.zig");
 
@@ -99,11 +100,13 @@ export fn msdrg_version_free(ver: ?*MsdrgVersion) void {
 
 const InputWrapper = struct {
     data: models.ProcessingData,
+    hospital_status: models.HospitalStatusOptionFlag = .NOT_EXEMPT,
 };
 
 export fn msdrg_input_create() ?*MsdrgInput {
     const wrapper = allocator.create(InputWrapper) catch return null;
     wrapper.data = models.ProcessingData.init(allocator);
+    wrapper.hospital_status = .NOT_EXEMPT;
     return @ptrCast(wrapper);
 }
 
@@ -190,18 +193,22 @@ fn intToDischargeStatus(v: i32) models.DischargeStatus {
 
 const ResultWrapper = struct {
     context: models.ProcessingContext,
+    arena: std.heap.ArenaAllocator,
 };
 
 export fn msdrg_group(ver: *MsdrgVersion, input: *MsdrgInput) ?*MsdrgResult {
     const link = @as(*chain.Link, @ptrCast(@alignCast(ver)));
     const input_wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
 
-    const context = models.ProcessingContext.init(allocator, &input_wrapper.data, .{});
+    const context = models.ProcessingContext.init(allocator, &input_wrapper.data, .{
+        .poa_reporting_exempt = input_wrapper.hospital_status,
+    });
 
     const result = link.execute(context) catch return null;
 
     const res_wrapper = allocator.create(ResultWrapper) catch return null;
     res_wrapper.context = result.context;
+    res_wrapper.arena = std.heap.ArenaAllocator.init(allocator);
 
     return @ptrCast(res_wrapper);
 }
@@ -211,6 +218,7 @@ export fn msdrg_group(ver: *MsdrgVersion, input: *MsdrgInput) ?*MsdrgResult {
 export fn msdrg_result_free(res: ?*MsdrgResult) void {
     if (res) |r| {
         const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(r)));
+        wrapper.arena.deinit();
         wrapper.context.deinit();
         allocator.destroy(wrapper);
     }
@@ -239,6 +247,218 @@ export fn msdrg_result_get_final_mdc(res: *MsdrgResult) i32 {
 export fn msdrg_result_get_return_code(res: *MsdrgResult) i32 {
     const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
     return @intFromEnum(wrapper.context.data.final_result.return_code);
+}
+
+export fn msdrg_result_get_return_code_name(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @tagName(wrapper.context.data.final_result.return_code);
+}
+
+// --- Result Description Getters ---
+// Returned strings are owned by the result and valid until msdrg_result_free.
+
+export fn msdrg_result_get_initial_drg_description(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.initial_result.drg_description) |desc| return desc.ptr;
+    return "";
+}
+
+export fn msdrg_result_get_final_drg_description(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.final_result.drg_description) |desc| return desc.ptr;
+    return "";
+}
+
+export fn msdrg_result_get_initial_mdc_description(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.initial_result.mdc_description) |desc| return desc.ptr;
+    return "";
+}
+
+export fn msdrg_result_get_final_mdc_description(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.final_result.mdc_description) |desc| return desc.ptr;
+    return "";
+}
+
+// --- Per-Code Output Getters ---
+// Returned strings are owned by the result and valid until msdrg_result_free.
+
+export fn msdrg_result_get_sdx_count(res: *MsdrgResult) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @intCast(wrapper.context.data.sdx_codes.items.len);
+}
+
+export fn msdrg_result_get_sdx_code(res: *MsdrgResult, index: i32) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.sdx_codes.items.len) return "";
+    return codeStr(wrapper.arena.allocator(), wrapper.context.data.sdx_codes.items[idx].value);
+}
+
+export fn msdrg_result_get_sdx_mdc(res: *MsdrgResult, index: i32) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.sdx_codes.items.len) return -1;
+    return wrapper.context.data.sdx_codes.items[idx].mdc orelse -1;
+}
+
+export fn msdrg_result_get_sdx_severity(res: *MsdrgResult, index: i32) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.sdx_codes.items.len) return "";
+    return @tagName(wrapper.context.data.sdx_codes.items[idx].severity);
+}
+
+export fn msdrg_result_get_sdx_drg_impact(res: *MsdrgResult, index: i32) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.sdx_codes.items.len) return "";
+    return @tagName(wrapper.context.data.sdx_codes.items[idx].drg_impact);
+}
+
+export fn msdrg_result_get_sdx_poa_error(res: *MsdrgResult, index: i32) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.sdx_codes.items.len) return "";
+    return @tagName(wrapper.context.data.sdx_codes.items[idx].poa_error_code_flag);
+}
+
+export fn msdrg_result_get_proc_count(res: *MsdrgResult) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @intCast(wrapper.context.data.procedure_codes.items.len);
+}
+
+export fn msdrg_result_get_proc_code(res: *MsdrgResult, index: i32) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.procedure_codes.items.len) return "";
+    return codeStr(wrapper.arena.allocator(), wrapper.context.data.procedure_codes.items[idx].value);
+}
+
+export fn msdrg_result_get_proc_is_or(res: *MsdrgResult, index: i32) bool {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.procedure_codes.items.len) return false;
+    return wrapper.context.data.procedure_codes.items[idx].is_operating_room;
+}
+
+export fn msdrg_result_get_proc_drg_impact(res: *MsdrgResult, index: i32) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.procedure_codes.items.len) return "";
+    return @tagName(wrapper.context.data.procedure_codes.items[idx].drg_impact);
+}
+
+export fn msdrg_result_get_proc_is_valid(res: *MsdrgResult, index: i32) bool {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.procedure_codes.items.len) return false;
+    return wrapper.context.data.procedure_codes.items[idx].is_valid_code;
+}
+
+// --- PDX Output Getters ---
+
+export fn msdrg_result_has_pdx(res: *MsdrgResult) bool {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return wrapper.context.data.principal_dx != null;
+}
+
+export fn msdrg_result_get_pdx_code(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.principal_dx) |pdx| return codeStr(wrapper.arena.allocator(), pdx.value);
+    return "";
+}
+
+export fn msdrg_result_get_pdx_mdc(res: *MsdrgResult) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.principal_dx) |pdx| return pdx.mdc orelse -1;
+    return -1;
+}
+
+export fn msdrg_result_get_pdx_severity(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.principal_dx) |pdx| return @tagName(pdx.severity);
+    return "";
+}
+
+export fn msdrg_result_get_pdx_drg_impact(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.principal_dx) |pdx| return @tagName(pdx.drg_impact);
+    return "";
+}
+
+export fn msdrg_result_get_pdx_poa_error(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.principal_dx) |pdx| return @tagName(pdx.poa_error_code_flag);
+    return "";
+}
+
+// --- Flag Getters ---
+// Returns comma-separated active flag names (e.g. "VALID,MARKED_FOR_INITIAL").
+// Memory is allocated with the result and freed with msdrg_result_free.
+
+fn codeStr(arena: std.mem.Allocator, code: common.Code) [*c]const u8 {
+    const slice = code.toSlice();
+    const copy = arena.allocSentinel(u8, slice.len, 0) catch return "";
+    @memcpy(copy, slice);
+    return copy.ptr;
+}
+
+fn formatFlags(arena: std.mem.Allocator, code: anytype) [*c]const u8 {
+    const T = @TypeOf(code);
+    const has_is = @hasDecl(T, "is");
+    if (!has_is) return "";
+
+    var buf: std.Io.Writer.Allocating = .init(arena);
+    var first = true;
+    inline for (std.meta.fields(models.CodeFlag)) |f| {
+        if (code.is(@enumFromInt(f.value))) {
+            if (!first) buf.writer.writeAll(",") catch {};
+            buf.writer.writeAll(@tagName(@as(models.CodeFlag, @enumFromInt(f.value)))) catch {};
+            first = false;
+        }
+    }
+    const slice = buf.toOwnedSlice() catch return "";
+    // Copy to null-terminated buffer so C callers see proper string end
+    const copy = arena.allocSentinel(u8, slice.len, 0) catch return "";
+    @memcpy(copy, slice);
+    arena.free(slice);
+    return copy.ptr;
+}
+
+export fn msdrg_result_get_pdx_flags(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    if (wrapper.context.data.principal_dx) |pdx| {
+        return formatFlags(wrapper.arena.allocator(), pdx);
+    }
+    return "";
+}
+
+export fn msdrg_result_get_sdx_flags(res: *MsdrgResult, index: i32) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.sdx_codes.items.len) return "";
+    return formatFlags(wrapper.arena.allocator(), wrapper.context.data.sdx_codes.items[idx]);
+}
+
+export fn msdrg_result_get_proc_flags(res: *MsdrgResult, index: i32) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    const idx = @as(usize, @intCast(index));
+    if (idx >= wrapper.context.data.procedure_codes.items.len) return "";
+    return formatFlags(wrapper.arena.allocator(), wrapper.context.data.procedure_codes.items[idx]);
+}
+
+// --- Hospital Status ---
+
+export fn msdrg_input_set_hospital_status(input: *MsdrgInput, status: i32) void {
+    const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
+    // 0=EXEMPT, 1=NOT_EXEMPT, 2=UNKNOWN
+    wrapper.hospital_status = switch (status) {
+        0 => .EXEMPT,
+        2 => .UNKNOWN,
+        else => .NOT_EXEMPT,
+    };
 }
 
 // --- Python Helper: JSON Output ---

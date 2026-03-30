@@ -25,7 +25,7 @@ class MsdrgGrouper(lib_path=None, data_dir=None)
 
 #### `group(claim_data)`
 
-Group a claim through the MS-DRG classification pipeline.
+Group a claim through the MS-DRG classification pipeline (JSON API — fastest for Python).
 
 ```python
 def group(self, claim_data: ClaimInput) -> GroupResult
@@ -38,6 +38,20 @@ def group(self, claim_data: ClaimInput) -> GroupResult
 **Returns:** `GroupResult` dictionary.
 
 **Raises:** `RuntimeError` if the grouper has been closed or the native engine returns null.
+
+#### `group_structured(claim_data)`
+
+Group a claim using the structured C API (individual getter/setter calls, no JSON serialization).
+
+This method builds a native `MsdrgInput` handle via individual FFI calls, executes `msdrg_group()`, and reads the result via ~25 getter calls. It avoids JSON parsing on the Zig side but incurs higher Python FFI overhead (~30 crossings vs. 2 for `group()`).
+
+Best suited for C/C++/Rust callers where FFI cost is negligible, or when you need to avoid JSON entirely. For Python bulk processing, `group()` is faster.
+
+```python
+def group_structured(self, claim_data: ClaimInput) -> GroupResult
+```
+
+**Returns:** Identical `GroupResult` dictionary as `group()`.
 
 #### `close()`
 
@@ -62,9 +76,10 @@ def create_claim(
     version: int,
     age: int,
     sex: Literal[0, 1, 2],
-    discharge_status: Literal[1, 20],
+    discharge_status: int,
     pdx: str,
-    sdx: list[str] | None = None,
+    pdx_poa: str | None = None,
+    sdx: list[str] | list[tuple[str, str]] | None = None,
     procedures: list[str] | None = None,
 ) -> ClaimInput
 ```
@@ -89,7 +104,7 @@ class ClaimInput(TypedDict, total=False):
     version: int                                          # MS-DRG version (required)
     age: int                                              # Patient age in years
     sex: Literal[0, 1, 2]                                 # 0=Male, 1=Female, 2=Unknown
-    discharge_status: Literal[1, 20]                      # 1=Home, 20=Died
+    discharge_status: int                                 # CMS discharge status code
     hospital_status: Literal["EXEMPT", "NOT_EXEMPT", "UNKNOWN"]
     pdx: DiagnosisInput                                   # Principal diagnosis (required)
     admit_dx: DiagnosisInput                              # Admission diagnosis
