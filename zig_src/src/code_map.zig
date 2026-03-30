@@ -27,7 +27,7 @@ pub const CodeMapData = struct {
     }
 
     pub fn getEntries(self: *const CodeMapData) []const CodeMapEntry {
-        const entries_ptr = @as([*]const CodeMapEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const CodeMapEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 

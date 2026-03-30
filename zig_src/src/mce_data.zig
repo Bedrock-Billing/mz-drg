@@ -90,12 +90,12 @@ pub const CodeMasterData = struct {
     }
 
     pub fn getEntries(self: *const CodeMasterData) []const CodeMasterEntry {
-        const ptr = @as([*]const CodeMasterEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const ptr = @as([*]const CodeMasterEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return ptr[0..self.mapped.header.num_entries];
     }
 
     pub fn getStringBlock(self: *const CodeMasterData) [*]const u8 {
-        return self.mapped.base_ptr + self.mapped.header.strings_offset;
+        return self.mapped.base_ptr() + self.mapped.header.strings_offset;
     }
 
     pub fn flagIterator(self: *const CodeMasterData, entry: *const CodeMasterEntry) FlagIterator {
@@ -244,12 +244,12 @@ pub const AgeRangeData = struct {
     }
 
     pub fn getEntries(self: *const AgeRangeData) []const AgeRangeEntry {
-        const ptr = @as([*]const AgeRangeEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const ptr = @as([*]const AgeRangeEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return ptr[0..self.mapped.header.num_entries];
     }
 
     pub fn getStringBlock(self: *const AgeRangeData) [*]const u8 {
-        return self.mapped.base_ptr + self.mapped.header.strings_offset;
+        return self.mapped.base_ptr() + self.mapped.header.strings_offset;
     }
 
     /// Check if an age is within a named age group for a given date.
@@ -316,7 +316,7 @@ pub const DischargeStatusData = struct {
     }
 
     pub fn getEntries(self: *const DischargeStatusData) []const DischargeStatusEntry {
-        const ptr = @as([*]const DischargeStatusEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const ptr = @as([*]const DischargeStatusEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return ptr[0..self.mapped.header.num_entries];
     }
 

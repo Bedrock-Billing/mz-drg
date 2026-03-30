@@ -26,7 +26,7 @@ pub const InitialDiagnosisMarking = struct {
 
         if (winning_formula) |drg_formula| {
             std.log.debug("InitialDiagnosisMarking: Winning formula found for DRG {d}", .{drg_formula.drg});
-            const base = self.formula_data.mapped.base_ptr;
+            const base = self.formula_data.mapped.base_ptr();
             const formula_str = drg_formula.getFormula(base);
 
             // Rebuild mask
@@ -245,7 +245,7 @@ pub const InitialProcedureMarking = struct {
                 mdc = 29;
             }
 
-            const base = self.formula_data.mapped.base_ptr;
+            const base = self.formula_data.mapped.base_ptr();
             const formula_str = drg_formula.getFormula(base);
 
             // Rebuild mask
@@ -506,7 +506,7 @@ pub const FinalDiagnosisMarking = struct {
         }
 
         if (winning_formula) |drg_formula| {
-            const base = self.formula_data.mapped.base_ptr;
+            const base = self.formula_data.mapped.base_ptr();
             const formula_str = drg_formula.getFormula(base);
 
             // Rebuild mask
@@ -734,7 +734,7 @@ pub const FinalProcedureMarking = struct {
                 mdc = 29;
             }
 
-            const base = self.formula_data.mapped.base_ptr;
+            const base = self.formula_data.mapped.base_ptr();
             const formula_str = drg_formula.getFormula(base);
 
             var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
@@ -1085,7 +1085,7 @@ fn commonDiagnosisFunctionMarking(
     }
 
     if (winning_formula) |drg_formula| {
-        const base = formula_data.mapped.base_ptr;
+        const base = formula_data.mapped.base_ptr();
         const formula_str = drg_formula.getFormula(base);
 
         var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
@@ -1226,7 +1226,7 @@ fn commonProcedureFunctionMarking(
     }
 
     if (winning_formula) |drg_formula| {
-        const base = formula_data.mapped.base_ptr;
+        const base = formula_data.mapped.base_ptr();
         const formula_str = drg_formula.getFormula(base);
 
         var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);

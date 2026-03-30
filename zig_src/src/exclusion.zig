@@ -25,7 +25,7 @@ pub const ExclusionData = struct {
     }
 
     pub fn getGroups(self: *const ExclusionData) []const ExclusionGroupIndex {
-        const index_ptr = @as([*]const ExclusionGroupIndex, @ptrCast(@alignCast(self.mapped.base_ptr + @sizeOf(DataHeader))));
+        const index_ptr = @as([*]const ExclusionGroupIndex, @ptrCast(@alignCast(self.mapped.base_ptr() + @sizeOf(DataHeader))));
         return index_ptr[0..self.mapped.header.num_groups];
     }
 
@@ -50,7 +50,7 @@ pub const ExclusionData = struct {
     }
 
     pub fn getCodes(self: *const ExclusionData, group: ExclusionGroupIndex) []const common.Code {
-        const codes_ptr = @as([*]const common.Code, @ptrCast(@alignCast(self.mapped.base_ptr + group.code_offset)));
+        const codes_ptr = @as([*]const common.Code, @ptrCast(@alignCast(self.mapped.base_ptr() + group.code_offset)));
         return codes_ptr[0..group.code_count];
     }
 };

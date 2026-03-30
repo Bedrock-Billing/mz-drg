@@ -28,7 +28,7 @@ pub const GenderMdcData = struct {
     }
 
     pub fn getEntries(self: *const GenderMdcData) []const GenderMdcEntry {
-        const entries_ptr = @as([*]const GenderMdcEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const GenderMdcEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 

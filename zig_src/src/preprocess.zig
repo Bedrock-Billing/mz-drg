@@ -53,7 +53,7 @@ pub const MsdrgClusters = struct {
                 std.log.debug("MsdrgClusters: Processing cluster index {d}", .{c_idx});
                 const cl = self.cluster_info.getCluster(c_idx);
                 std.log.debug("MsdrgClusters: Got cluster, getting choices...", .{});
-                var choices = cl.getChoices();
+                const choices = cl.getChoices();
                 const choice_count = choices.count;
                 std.log.debug("MsdrgClusters: Choice count: {d}", .{choice_count});
 
@@ -250,7 +250,7 @@ pub const PdxAttributeProcessor = struct {
                     if (scheme.operands_pattern >= 0) {
                         if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.operands_pattern)))) |pat| {
                             const attrs = self.dx_patterns.getAttributes(pat);
-                            const base = self.dx_patterns.mapped.base_ptr;
+                            const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
                                 const attr_str = attr_ref.get(base);
                                 try pdx.attributes.append(allocator, models.Attribute{ .list_name = attr_str });
@@ -262,7 +262,7 @@ pub const PdxAttributeProcessor = struct {
                     if (scheme.dx_cat_list_pattern >= 0) {
                         if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.dx_cat_list_pattern)))) |pat| {
                             const attrs = self.dx_patterns.getAttributes(pat);
-                            const base = self.dx_patterns.mapped.base_ptr;
+                            const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
                                 const attr_str = attr_ref.get(base);
                                 try pdx.dx_cat_attributes.append(allocator, models.Attribute{ .list_name = attr_str });
@@ -274,7 +274,7 @@ pub const PdxAttributeProcessor = struct {
                     if (scheme.hac_operand_pattern >= 0) {
                         if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.hac_operand_pattern)))) |pat| {
                             const attrs = self.dx_patterns.getAttributes(pat);
-                            const base = self.dx_patterns.mapped.base_ptr;
+                            const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
                                 const attr_str = attr_ref.get(base);
                                 try pdx.hac_attributes.append(allocator, models.Attribute{ .list_name = attr_str });
@@ -331,7 +331,7 @@ pub const PdxAttributeProcessor = struct {
             if (has_hac11) {
                 var desc: []const u8 = "";
                 if (self.hac_descriptions.getEntry(11, self.version)) |hac_desc_entry| {
-                    desc = hac_desc_entry.getDescription(self.hac_descriptions.mapped.base_ptr);
+                    desc = hac_desc_entry.getDescription(self.hac_descriptions.mapped.base_ptr());
                 }
 
                 const hac_obj = models.Hac{
@@ -399,7 +399,7 @@ pub const SdxAttributeProcessor = struct {
                     if (scheme.operands_pattern >= 0) {
                         if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.operands_pattern)))) |pat| {
                             const attrs = self.dx_patterns.getAttributes(pat);
-                            const base = self.dx_patterns.mapped.base_ptr;
+                            const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
                                 const attr_str = attr_ref.get(base);
                                 try sdx.attributes.append(allocator, models.Attribute{ .list_name = attr_str });
@@ -411,7 +411,7 @@ pub const SdxAttributeProcessor = struct {
                     if (scheme.dx_cat_list_pattern >= 0) {
                         if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.dx_cat_list_pattern)))) |pat| {
                             const attrs = self.dx_patterns.getAttributes(pat);
-                            const base = self.dx_patterns.mapped.base_ptr;
+                            const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
                                 const attr_str = attr_ref.get(base);
                                 try sdx.dx_cat_attributes.append(allocator, models.Attribute{ .list_name = attr_str });
@@ -423,7 +423,7 @@ pub const SdxAttributeProcessor = struct {
                     if (scheme.hac_operand_pattern >= 0) {
                         if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.hac_operand_pattern)))) |pat| {
                             const attrs = self.dx_patterns.getAttributes(pat);
-                            const base = self.dx_patterns.mapped.base_ptr;
+                            const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
                                 const attr_str = attr_ref.get(base);
                                 try sdx.hac_attributes.append(allocator, models.Attribute{ .list_name = attr_str });
@@ -449,7 +449,7 @@ pub const SdxAttributeProcessor = struct {
 
                         var desc: []const u8 = "";
                         if (self.hac_descriptions.getEntry(hac_num, self.version)) |hac_desc_entry| {
-                            desc = hac_desc_entry.getDescription(self.hac_descriptions.mapped.base_ptr);
+                            desc = hac_desc_entry.getDescription(self.hac_descriptions.mapped.base_ptr());
                         }
 
                         const hac_obj = models.Hac{
@@ -514,7 +514,7 @@ pub const ProcedureAttributeProcessor = struct {
             std.log.debug("ProcedureAttributeProcessor: Code {s} -> Pattern ID {d}", .{ code_slice, pattern_id });
             if (self.pr_patterns.getPattern(pattern_id)) |pat| {
                 const attrs = self.pr_patterns.getAttributes(pat);
-                const base = self.pr_patterns.mapped.base_ptr;
+                const base = self.pr_patterns.mapped.base_ptr();
 
                 var has_d477 = false;
                 var has_d468 = false;

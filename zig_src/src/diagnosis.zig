@@ -37,12 +37,12 @@ pub const DiagnosisData = struct {
     }
 
     pub fn getSchemes(self: *const DiagnosisData) []const MsdrgDiagnosis {
-        const schemes_ptr = @as([*]const MsdrgDiagnosis, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.schemes_offset)));
+        const schemes_ptr = @as([*]const MsdrgDiagnosis, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.schemes_offset)));
         return schemes_ptr[0..self.mapped.header.num_schemes];
     }
 
     pub fn getDiagnoses(self: *const DiagnosisData) []const DiagnosisEntry {
-        const diagnoses_ptr = @as([*]const DiagnosisEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.diagnoses_offset)));
+        const diagnoses_ptr = @as([*]const DiagnosisEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.diagnoses_offset)));
         return diagnoses_ptr[0..self.mapped.header.num_diagnoses];
     }
 

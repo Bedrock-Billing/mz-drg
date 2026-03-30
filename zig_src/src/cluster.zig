@@ -23,16 +23,16 @@ pub const ClusterInfoData = struct {
     }
 
     pub fn getClusterOffset(self: *const ClusterInfoData, cluster_index: usize) u32 {
-        const offsets_ptr = @as([*]const u32, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.offsets_offset)));
+        const offsets_ptr = @as([*]const u32, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.offsets_offset)));
         return offsets_ptr[cluster_index];
     }
 
     pub fn getCluster(self: *const ClusterInfoData, cluster_index: usize) Cluster {
         const offset = self.getClusterOffset(cluster_index);
         return Cluster{
-            .base_ptr = self.mapped.base_ptr,
-            .data_ptr = self.mapped.base_ptr + offset,
-            .limit = self.mapped.base_ptr + self.mapped.data.len,
+            .base_ptr = self.mapped.base_ptr(),
+            .data_ptr = self.mapped.base_ptr() + offset,
+            .limit = self.mapped.base_ptr() + self.mapped.map.memory.len,
         };
     }
 };
@@ -271,12 +271,12 @@ pub const ClusterMapData = struct {
     }
 
     pub fn getEntries(self: *const ClusterMapData) []const ClusterMapEntry {
-        const entries_ptr = @as([*]const ClusterMapEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const ClusterMapEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 
     pub fn getClusters(self: *const ClusterMapData, entry: ClusterMapEntry) []const u16 {
-        const list_ptr = @as([*]const u16, @ptrCast(@alignCast(self.mapped.base_ptr + entry.list_offset)));
+        const list_ptr = @as([*]const u16, @ptrCast(@alignCast(self.mapped.base_ptr() + entry.list_offset)));
         return list_ptr[0..entry.list_count];
     }
 

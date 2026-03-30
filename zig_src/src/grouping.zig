@@ -457,7 +457,7 @@ pub const GroupingExecutor = struct {
 
                 // Calculate Severity
                 const supp_list = formula_data.getSuppressionList(drg_formula.supp_offset, drg_formula.supp_count);
-                const base = formula_data.mapped.base_ptr;
+                const base = formula_data.mapped.base_ptr();
 
                 const severity = MsdrgSeverityProcessor.processClaimSeverity(data.sdx_codes.items, supp_list, base);
 
@@ -743,14 +743,14 @@ pub const MsdrgInitialDrgResults = struct {
         // Fetch DRG description
         if (data.initial_result.drg) |drg| {
             if (self.description_data.getEntry(@intCast(drg), self.version)) |entry| {
-                data.initial_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr);
+                data.initial_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr());
             }
         }
 
         // Fetch MDC description
         if (data.initial_result.mdc) |mdc| {
             if (self.mdc_description_data.getEntry(@intCast(mdc), self.version)) |entry| {
-                data.initial_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr);
+                data.initial_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr());
             }
         }
 
@@ -934,14 +934,14 @@ pub const MsdrgFinalDrgResults = struct {
         if (data.final_result.drg) |drg| {
             if (data.final_result.drg_description == null or data.final_result.drg_description.?.len == 0) {
                 if (self.description_data.*.getEntry(@intCast(drg), self.version)) |entry| {
-                    data.final_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr);
+                    data.final_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr());
                 }
             }
         }
         if (data.final_result.mdc) |mdc| {
             if (data.final_result.mdc_description == null or data.final_result.mdc_description.?.len == 0) {
                 if (self.mdc_description_data.*.getEntry(@intCast(mdc), self.version)) |entry| {
-                    data.final_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr);
+                    data.final_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr());
                 }
             }
         }

@@ -55,7 +55,7 @@ pub const FormulaData = struct {
     }
 
     pub fn getEntries(self: *const FormulaData) []const FormulaEntryIndex {
-        const entries_ptr = @as([*]const FormulaEntryIndex, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const FormulaEntryIndex, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 
@@ -100,12 +100,12 @@ pub const FormulaData = struct {
     }
 
     pub fn getFormulas(self: *const FormulaData) []const DrgFormula {
-        const formulas_ptr = @as([*]const DrgFormula, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.formulas_offset)));
+        const formulas_ptr = @as([*]const DrgFormula, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.formulas_offset)));
         return formulas_ptr[0..self.mapped.header.num_formulas];
     }
 
     pub fn getSuppressionList(self: *const FormulaData, offset: u32, count: u32) []const common.StringRef {
-        const supp_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr + offset)));
+        const supp_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr() + offset)));
         return supp_ptr[0..count];
     }
 };

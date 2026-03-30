@@ -34,7 +34,7 @@ pub const DescriptionData = struct {
     }
 
     pub fn getEntries(self: *const DescriptionData) []const DescriptionEntry {
-        const entries_ptr = @as([*]const DescriptionEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const DescriptionEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 

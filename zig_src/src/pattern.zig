@@ -28,7 +28,7 @@ pub const PatternData = struct {
     }
 
     pub fn getEntries(self: *const PatternData) []const PatternEntry {
-        const entries_ptr = @as([*]const PatternEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const PatternEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 
@@ -53,7 +53,7 @@ pub const PatternData = struct {
     }
 
     pub fn getAttributes(self: *const PatternData, entry: PatternEntry) []const common.StringRef {
-        const list_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr + entry.offset)));
+        const list_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr() + entry.offset)));
         return list_ptr[0..entry.count];
     }
 };
@@ -118,7 +118,7 @@ test "PatternData lookup" {
 
     const attrs1 = data.getAttributes(p1.?);
     try std.testing.expectEqual(@as(usize, 1), attrs1.len);
-    try std.testing.expect(std.mem.eql(u8, attrs1[0].get(@as([*]const u8, @ptrCast(data.mapped.base_ptr))), "ABC"));
+    try std.testing.expect(std.mem.eql(u8, attrs1[0].get(@as([*]const u8, @ptrCast(data.mapped.base_ptr()))), "ABC"));
 
     const p2 = data.getPattern(20);
     try std.testing.expect(p2 != null);

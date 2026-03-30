@@ -39,7 +39,7 @@ pub const HacDescriptionData = struct {
     }
 
     pub fn getEntries(self: *const HacDescriptionData) []const HacDescriptionEntry {
-        const entries_ptr = @as([*]const HacDescriptionEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const HacDescriptionEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 
@@ -114,7 +114,7 @@ pub const HacFormulaData = struct {
     }
 
     pub fn getEntries(self: *const HacFormulaData) []const HacFormulaEntry {
-        const entries_ptr = @as([*]const HacFormulaEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const HacFormulaEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 
@@ -159,7 +159,7 @@ pub const HacFormulaData = struct {
     }
 
     pub fn getFormulas(self: *const HacFormulaData, entry: HacFormulaEntry) []const common.StringRef {
-        const list_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr + entry.list_offset)));
+        const list_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr() + entry.list_offset)));
         return list_ptr[0..entry.count];
     }
 };
@@ -193,7 +193,7 @@ pub const HacOperandData = struct {
     }
 
     pub fn getEntries(self: *const HacOperandData) []const HacOperandEntry {
-        const entries_ptr = @as([*]const HacOperandEntry, @ptrCast(@alignCast(self.mapped.base_ptr + self.mapped.header.entries_offset)));
+        const entries_ptr = @as([*]const HacOperandEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
         return entries_ptr[0..self.mapped.header.num_entries];
     }
 
@@ -237,7 +237,7 @@ pub const HacOperandData = struct {
     }
 
     pub fn getHacs(self: *const HacOperandData, entry: HacOperandEntry) []const u8 {
-        const list_ptr = self.mapped.base_ptr + entry.list_offset;
+        const list_ptr = self.mapped.base_ptr() + entry.list_offset;
         return list_ptr[0..entry.count];
     }
 };
@@ -553,7 +553,7 @@ pub const MsdrgHacProcessor = struct {
 
         if (self.formula_data.getEntry(@intCast(hac.hac_number), self.version)) |entry| {
             const formulas = self.formula_data.getFormulas(entry);
-            const base = self.formula_data.mapped.base_ptr;
+            const base = self.formula_data.mapped.base_ptr();
 
             for (formulas) |f_ref| {
                 const formula_str = f_ref.get(base);
