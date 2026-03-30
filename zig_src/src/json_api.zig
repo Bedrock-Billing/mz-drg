@@ -1,7 +1,6 @@
 const std = @import("std");
 const msdrg = @import("msdrg.zig");
 const models = @import("models.zig");
-const chain = @import("chain.zig");
 
 pub const JsonDiagnosis = struct {
     code: []const u8,

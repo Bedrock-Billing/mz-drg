@@ -340,10 +340,6 @@ pub const MsdrgMaskBuilder = struct {
             try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.MULTFUSE }, allocator, &cumulatives);
         }
 
-        if (cumulatives.single_fusion_count > 1) {
-            try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.MULTFUSE }, allocator, &cumulatives);
-        }
-
         if (cumulatives.anterior_fusion_count > 1) {
             try addAttr(&mask, models.Attribute{ .list_name = models.SourceLogicLists.SGLANTSECTXCTR }, allocator, &cumulatives);
         }

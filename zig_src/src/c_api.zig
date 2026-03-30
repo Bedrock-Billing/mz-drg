@@ -5,14 +5,8 @@ const common = @import("common.zig");
 const chain = @import("chain.zig");
 const json_api = @import("json_api.zig");
 
-// MCE module — import ensures MCE export functions are included in the shared library
+// MCE module — comptime reference forces export functions into shared library
 const mce_c_api = @import("mce_c_api.zig");
-const mce_json_api = @import("mce_json_api.zig");
-const mce = @import("mce.zig");
-const mce_data = @import("mce_data.zig");
-const mce_enums = @import("mce_enums.zig");
-const mce_validation = @import("mce_validation.zig");
-const mce_editing = @import("mce_editing.zig");
 
 // --- Thread Safety ---
 // This C API is designed for thread-safe concurrent access:

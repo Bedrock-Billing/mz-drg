@@ -120,13 +120,6 @@ def _poa_byte(poa: str | None) -> int:
     return ord(" ")
 
 
-def _optional_str(value: str | None) -> str | None:
-    """Return None for empty/None strings, otherwise the string."""
-    if value is None or value == "":
-        return None
-    return value
-
-
 class MsdrgGrouper:
     """
     MS-DRG Grouper client.
@@ -261,9 +254,6 @@ class MsdrgGrouper:
         self.lib.msdrg_result_get_final_mdc.argtypes = [ctypes.c_void_p]
         self.lib.msdrg_result_get_final_mdc.restype = ctypes.c_int32
 
-        self.lib.msdrg_result_get_return_code.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_return_code.restype = ctypes.c_int32
-
         self.lib.msdrg_result_get_return_code_name.argtypes = [ctypes.c_void_p]
         self.lib.msdrg_result_get_return_code_name.restype = ctypes.c_void_p
 
@@ -345,12 +335,6 @@ class MsdrgGrouper:
             ctypes.c_int32,
         ]
         self.lib.msdrg_result_get_proc_drg_impact.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_proc_is_valid.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_result_get_proc_is_valid.restype = ctypes.c_bool
 
         # Flag getters
         self.lib.msdrg_result_get_pdx_flags.argtypes = [ctypes.c_void_p]

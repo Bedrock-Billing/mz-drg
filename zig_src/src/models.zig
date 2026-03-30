@@ -2,10 +2,6 @@ const std = @import("std");
 const common = @import("common.zig");
 const formula = @import("formula.zig");
 
-pub const GrouperError = error{
-    DX_CANNOT_BE_PDX,
-};
-
 pub const Sex = enum {
     MALE,
     FEMALE,
