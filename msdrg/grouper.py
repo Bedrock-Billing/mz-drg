@@ -43,6 +43,7 @@ class ClaimInput(TypedDict, total=False):
     sex: Literal[0, 1, 2]  # 0=Male, 1=Female, 2=Unknown
     discharge_status: int  # CMS discharge status code (e.g. 1, 2, 3, ... 20, etc.)
     hospital_status: Literal["EXEMPT", "NOT_EXEMPT", "UNKNOWN"]
+    tie_breaker: Literal["CLINICAL_SIGNIFICANCE", "ALPHABETICAL"]
     pdx: DiagnosisInput
     admit_dx: DiagnosisInput
     sdx: list[DiagnosisInput]
@@ -104,6 +105,11 @@ _HOSPITAL_STATUS_MAP: dict[str, int] = {
     "EXEMPT": 0,
     "NOT_EXEMPT": 1,
     "UNKNOWN": 2,
+}
+
+_TIE_BREAKER_MAP: dict[str, int] = {
+    "CLINICAL_SIGNIFICANCE": 0,
+    "ALPHABETICAL": 1,
 }
 
 
@@ -220,6 +226,12 @@ class MsdrgGrouper:
             ctypes.c_int32,
         ]
         self.lib.msdrg_input_set_hospital_status.restype = None
+
+        self.lib.msdrg_input_set_tie_breaker.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_int32,
+        ]
+        self.lib.msdrg_input_set_tie_breaker.restype = None
 
         # --- Grouping (structured) ---
         self.lib.msdrg_group.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
@@ -449,6 +461,11 @@ class MsdrgGrouper:
             self.lib.msdrg_input_set_hospital_status(
                 inp, _HOSPITAL_STATUS_MAP.get(hs, 1)
             )
+
+        # Tie breaker
+        tb = claim_data.get("tie_breaker")
+        if tb is not None:
+            self.lib.msdrg_input_set_tie_breaker(inp, _TIE_BREAKER_MAP.get(tb, 0))
 
         # PDX
         pdx = claim_data.get("pdx")

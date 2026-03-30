@@ -110,6 +110,7 @@ with msdrg.MsdrgGrouper() as g, msdrg.MceEditor() as mce:
     "sex": 0,                    # 0=Male, 1=Female, 2=Unknown
     "discharge_status": 1,       # 1=Home/Self Care, 20=Died
     "hospital_status": "NOT_EXEMPT",  # "NOT_EXEMPT" (default), "EXEMPT", or "UNKNOWN"
+    "tie_breaker": "CLINICAL_SIGNIFICANCE",  # "CLINICAL_SIGNIFICANCE" (default) or "ALPHABETICAL"
     "pdx": {                     # Principal diagnosis (required)
         "code": "I5020",
         "poa": "Y"               # Present on Admission: Y/N/U/W (optional)
@@ -136,6 +137,15 @@ The `hospital_status` field controls how Hospital-Acquired Condition (HAC) proce
 | `"NOT_EXEMPT"` | Standard HAC processing. Default. |
 | `"EXEMPT"` | Hospital is exempt from POA reporting. No HAC/POA ungroupable conditions. |
 | `"UNKNOWN"` | Stricter POA validation with specific ungroupable return codes. |
+
+### Tie breaker
+
+The `tie_breaker` field controls how the grouper resolves attribute matches when multiple secondary diagnoses could match the same DRG formula attribute. This determines which diagnosis "wins" during the marking phase.
+
+| Value | Behavior |
+|-------|----------|
+| `"CLINICAL_SIGNIFICANCE"` | MCC diagnoses get first pick over CC, then by ICD code string. Default, matches CMS Java grouper. |
+| `"ALPHABETICAL"` | Sort by ICD code string only, ignoring severity. |
 
 ### Output format
 

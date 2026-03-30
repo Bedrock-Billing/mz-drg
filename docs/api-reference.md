@@ -106,6 +106,7 @@ class ClaimInput(TypedDict, total=False):
     sex: Literal[0, 1, 2]                                 # 0=Male, 1=Female, 2=Unknown
     discharge_status: int                                 # CMS discharge status code
     hospital_status: Literal["EXEMPT", "NOT_EXEMPT", "UNKNOWN"]
+    tie_breaker: Literal["CLINICAL_SIGNIFICANCE", "ALPHABETICAL"]
     pdx: DiagnosisInput                                   # Principal diagnosis (required)
     admit_dx: DiagnosisInput                              # Admission diagnosis
     sdx: list[DiagnosisInput]                             # Secondary diagnoses

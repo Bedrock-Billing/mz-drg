@@ -18,7 +18,7 @@ graph LR
     D -->|"Hospital-Acquired<br>Condition rules"| E
 ```
 
-1. **Preprocessing** — loads diagnosis attributes, applies exclusions, clusters codes
+1. **Preprocessing** — loads diagnosis attributes, applies exclusions, clusters codes, sorts by clinical significance
 2. **Grouping** — evaluates DRG formulas against the claim's clinical profile
 3. **HAC Processing** — applies Hospital-Acquired Condition rules based on `hospital_status`
 4. **Final Grouping** — produces the final DRG assignment

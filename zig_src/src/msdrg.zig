@@ -229,10 +229,14 @@ pub const GrouperChain = struct {
         const l_life_status = try allocator.create(preprocess.MsdrgLifeStatus);
         l_life_status.* = preprocess.MsdrgLifeStatus{};
 
+        const l_code_setup = try allocator.create(preprocess.CodeSetup);
+        l_code_setup.* = preprocess.CodeSetup{};
+
         const preprocessing_links = [_]chain.Link{
             chain.Link{ .ptr = l_clusters, .executeFn = preprocess.MsdrgClusters.execute, .deinitFn = makeDeinit(preprocess.MsdrgClusters) },
             chain.Link{ .ptr = l_proc_attr, .executeFn = preprocess.ProcedureAttributeProcessor.execute, .deinitFn = makeDeinit(preprocess.ProcedureAttributeProcessor) },
             chain.Link{ .ptr = l_sdx_attr, .executeFn = preprocess.SdxAttributeProcessor.execute, .deinitFn = makeDeinit(preprocess.SdxAttributeProcessor) },
+            chain.Link{ .ptr = l_code_setup, .executeFn = preprocess.CodeSetup.execute, .deinitFn = makeDeinit(preprocess.CodeSetup) },
             chain.Link{ .ptr = l_exclusions, .executeFn = preprocess.MsdrgExclusions.execute, .deinitFn = makeDeinit(preprocess.MsdrgExclusions) },
             chain.Link{ .ptr = l_pdx_attr, .executeFn = preprocess.PdxAttributeProcessor.execute, .deinitFn = makeDeinit(preprocess.PdxAttributeProcessor) },
             chain.Link{ .ptr = l_life_status, .executeFn = preprocess.MsdrgLifeStatus.execute, .deinitFn = makeDeinit(preprocess.MsdrgLifeStatus) },

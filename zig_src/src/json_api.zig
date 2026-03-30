@@ -22,6 +22,7 @@ pub const InputClaim = struct {
     sex: i32 = 2, // Default UNKNOWN
     discharge_status: i32 = 0,
     hospital_status: ?[]const u8 = null, // "EXEMPT", "NOT_EXEMPT", "UNKNOWN"
+    tie_breaker: ?[]const u8 = null, // "CLINICAL_SIGNIFICANCE", "ALPHABETICAL"
 };
 
 pub const OutputResult = struct {
@@ -75,6 +76,13 @@ fn parseHospitalStatus(str: ?[]const u8) models.HospitalStatusOptionFlag {
         if (std.mem.eql(u8, s, "UNKNOWN")) return .UNKNOWN;
     }
     return .NOT_EXEMPT;
+}
+
+fn parseTieBreaker(str: ?[]const u8) models.MarkingLogicTieBreaker {
+    if (str) |s| {
+        if (std.mem.eql(u8, s, "ALPHABETICAL")) return .ALPHABETICAL;
+    }
+    return .CLINICAL_SIGNIFICANCE;
 }
 
 fn mapDiagnosisOutput(arena: std.mem.Allocator, dx: models.DiagnosisCode) !DiagnosisOutput {
@@ -160,6 +168,7 @@ pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdr
     // 4. Execute
     const runtime_options = models.RuntimeOptions{
         .poa_reporting_exempt = parseHospitalStatus(input.hospital_status),
+        .tie_breaker = parseTieBreaker(input.tie_breaker),
     };
     const context = models.ProcessingContext.init(root_allocator, &data, runtime_options);
     const result = try link.execute(context);

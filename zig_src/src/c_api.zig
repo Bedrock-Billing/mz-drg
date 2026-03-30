@@ -101,12 +101,14 @@ export fn msdrg_version_free(ver: ?*MsdrgVersion) void {
 const InputWrapper = struct {
     data: models.ProcessingData,
     hospital_status: models.HospitalStatusOptionFlag = .NOT_EXEMPT,
+    tie_breaker: models.MarkingLogicTieBreaker = .CLINICAL_SIGNIFICANCE,
 };
 
 export fn msdrg_input_create() ?*MsdrgInput {
     const wrapper = allocator.create(InputWrapper) catch return null;
     wrapper.data = models.ProcessingData.init(allocator);
     wrapper.hospital_status = .NOT_EXEMPT;
+    wrapper.tie_breaker = .CLINICAL_SIGNIFICANCE;
     return @ptrCast(wrapper);
 }
 
@@ -202,6 +204,7 @@ export fn msdrg_group(ver: *MsdrgVersion, input: *MsdrgInput) ?*MsdrgResult {
 
     const context = models.ProcessingContext.init(allocator, &input_wrapper.data, .{
         .poa_reporting_exempt = input_wrapper.hospital_status,
+        .tie_breaker = input_wrapper.tie_breaker,
     });
 
     const result = link.execute(context) catch return null;
@@ -458,6 +461,17 @@ export fn msdrg_input_set_hospital_status(input: *MsdrgInput, status: i32) void 
         0 => .EXEMPT,
         2 => .UNKNOWN,
         else => .NOT_EXEMPT,
+    };
+}
+
+// --- Tie Breaker ---
+
+export fn msdrg_input_set_tie_breaker(input: *MsdrgInput, mode: i32) void {
+    const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
+    // 0=CLINICAL_SIGNIFICANCE, 1=ALPHABETICAL
+    wrapper.tie_breaker = switch (mode) {
+        1 => .ALPHABETICAL,
+        else => .CLINICAL_SIGNIFICANCE,
     };
 }
 

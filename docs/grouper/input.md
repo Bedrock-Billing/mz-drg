@@ -28,6 +28,7 @@ The `group()` method accepts a dictionary with the following fields:
 | `sex` | int | Yes | `0`=Male, `1`=Female, `2`=Unknown |
 | `discharge_status` | int | Yes | CMS discharge status code (see below) |
 | `hospital_status` | str | No | `"NOT_EXEMPT"` (default), `"EXEMPT"`, or `"UNKNOWN"`. See [Hospital Status](hospital-status.md). |
+| `tie_breaker` | str | No | `"CLINICAL_SIGNIFICANCE"` (default) or `"ALPHABETICAL"`. See [Tie Breaker](#tie-breaker). |
 | `pdx` | dict | Yes | Principal diagnosis |
 | `admit_dx` | dict | No | Admission diagnosis |
 | `sdx` | list | No | Secondary diagnoses (defaults to `[]`) |
@@ -61,3 +62,16 @@ The grouper primarily uses these values for DRG assignment logic:
 
 !!! note
     Other valid CMS discharge status codes (2–99) are accepted but do not alter grouping behavior in most DRG logic paths. The grouper specifically checks for status `20` (died) which affects certain DRG assignments.
+
+## Tie breaker
+
+The `tie_breaker` field controls how secondary diagnoses are prioritized during the marking phase. When multiple SDX codes could match the same DRG formula attribute, this determines which one "wins":
+
+| Value | Behavior |
+|-------|----------|
+| `"CLINICAL_SIGNIFICANCE"` | Sort SDX codes: MCC first, then CC, then by ICD code string. **Default.** Matches CMS Java grouper behavior. |
+| `"ALPHABETICAL"` | Sort SDX codes by ICD code string only. |
+
+The CMS Java grouper defaults to `CLINICAL_SIGNIFICANCE`, which means the most severe diagnosis gets first pick of attribute matches. For example, if both an MCC and a CC diagnosis could contribute to the same formula attribute, the MCC wins and gets marked.
+
+Procedure codes are also sorted by code value when `CLINICAL_SIGNIFICANCE` is active.

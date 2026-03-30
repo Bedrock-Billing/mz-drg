@@ -545,3 +545,45 @@ pub const ProcedureAttributeProcessor = struct {
         }
     }
 };
+
+/// Sorts SDX codes by clinical significance (MCC > CC > other, then by code string)
+/// and procedure codes by code value. Runs after all attribute processing.
+pub const CodeSetup = struct {
+    pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
+        _ = ptr;
+        const data = context.data;
+
+        if (context.runtime.tie_breaker == .CLINICAL_SIGNIFICANCE) {
+            // Sort SDX codes: MCC first, then CC, then by code string
+            std.mem.sort(models.DiagnosisCode, data.sdx_codes.items, {}, struct {
+                fn lessThan(_: void, a: models.DiagnosisCode, b: models.DiagnosisCode) bool {
+                    const sev_rank = struct {
+                        fn val(s: models.Severity) u2 {
+                            return switch (s) {
+                                .MCC => 0,
+                                .CC => 1,
+                                .NONE => 2,
+                            };
+                        }
+                    };
+                    const a_r = sev_rank.val(a.severity);
+                    const b_r = sev_rank.val(b.severity);
+                    if (a_r != b_r) return a_r < b_r;
+                    return std.mem.lessThan(u8, a.value.toSlice(), b.value.toSlice());
+                }
+            }.lessThan);
+
+            // Sort procedure codes by code value
+            std.mem.sort(models.ProcedureCode, data.procedure_codes.items, {}, struct {
+                fn lessThan(_: void, a: models.ProcedureCode, b: models.ProcedureCode) bool {
+                    return std.mem.lessThan(u8, a.value.toSlice(), b.value.toSlice());
+                }
+            }.lessThan);
+        }
+
+        return chain.LinkResult{
+            .context = context,
+            .continue_processing = true,
+        };
+    }
+};

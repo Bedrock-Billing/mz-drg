@@ -4,6 +4,36 @@ All notable changes to this project are documented here. This project adheres to
 
 ---
 
+## v0.1.7 — 2026-03-30
+
+### Added
+
+- :sparkles: **Clinical significance tie-breaking** — SDX codes are now sorted by severity (MCC > CC > other, then by ICD code string) before the marking phase. This matches the CMS Java grouper's `CLINICAL_SIGNIFICANCE` tie-breaking behavior, where the most clinically significant diagnosis gets first pick of matching attributes during DRG formula evaluation.
+
+- **`tie_breaker` input field** — new optional per-request field on `ClaimInput`:
+  ```python
+  {"tie_breaker": "CLINICAL_SIGNIFICANCE"}  # default
+  {"tie_breaker": "ALPHABETICAL"}            # ICD code string only
+  ```
+  The default (`CLINICAL_SIGNIFICANCE`) matches the CMS Java reference and is what all users should use unless specifically overriding.
+
+- **`MarkingLogicTieBreaker` enum** — new enum in `models.zig` (`CLINICAL_SIGNIFICANCE`, `ALPHABETICAL`) stored on `RuntimeOptions`.
+
+- **`msdrg_input_set_tie_breaker()`** — C API function for structured callers:
+  ```c
+  msdrg_input_set_tie_breaker(input, 0);  // 0=CLINICAL_SIGNIFICANCE, 1=ALPHABETICAL
+  ```
+
+- **`CodeSetup` preprocessing link** — new chain link inserted after `SdxAttributeProcessor` that sorts SDX codes (MCC > CC > other, by code string) and procedure codes (by code value) when `CLINICAL_SIGNIFICANCE` mode is active.
+
+### Fixed
+
+- :bug: **Stent marking: wrong attribute name case** — `markStents()` in `marking.zig` used `"nordrugstent"` and `"norstent"` (lowercase) instead of the correct `"NORdrugstent"` and `"NORstent"` (mixed case) from the data layer. The attribute cleanup after stent processing was silently failing, leaving stale attributes in the matched set.
+
+- :bug: **Stent marking: missing secondary phase** — Implemented the missing secondary marking pass from the Java reference (`ProcedureFunctionMarking.java:61-73`). When the DRG formula matches both `arterial` and `NORdrugstent` (or `NORstent`), procedures with both attributes are now marked even if they lack the `STENT_4` flag.
+
+---
+
 ## v0.1.6 — 2026-03-30
 
 ### Added

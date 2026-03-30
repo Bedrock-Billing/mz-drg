@@ -125,8 +125,14 @@ pub const HospitalStatusOptionFlag = enum {
     UNKNOWN,
 };
 
+pub const MarkingLogicTieBreaker = enum {
+    CLINICAL_SIGNIFICANCE,
+    ALPHABETICAL,
+};
+
 pub const RuntimeOptions = struct {
     poa_reporting_exempt: HospitalStatusOptionFlag = .NOT_EXEMPT,
+    tie_breaker: MarkingLogicTieBreaker = .CLINICAL_SIGNIFICANCE,
 };
 
 pub const GrouperReturnCode = enum {
