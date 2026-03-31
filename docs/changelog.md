@@ -32,6 +32,16 @@ All notable changes to this project are documented here. This project adheres to
 
 - :bug: **Stent marking: missing secondary phase** — Implemented the missing secondary marking pass from the Java reference (`ProcedureFunctionMarking.java:61-73`). When the DRG formula matches both `arterial` and `NORdrugstent` (or `NORstent`), procedures with both attributes are now marked even if they lack the `STENT_4` flag.
 
+### Performance
+
+- :rocket: **~57% throughput increase** (7,000 → 11,000+ claims/sec). Two optimizations:
+
+  **Mask-once architecture** — the attribute mask is now built once after preprocessing and reused across all grouping, marking, and HAC call sites. Previously, `buildMask()` was called ~14-20 times per claim (each doing ~200-400 HashMap insertions with heap-allocated keys). Now it builds twice total (once after preprocessing, once after HAC processing). This eliminated ~10,000+ redundant heap allocations per claim.
+
+  **Zero-allocation attribute comparison** — replaced all `Attribute.toString()` + `allocator.free()` pairs in marking inner loops with `Attribute.matchesString()`, which compares directly using a stack buffer for prefixed attributes. Eliminated ~200 heap churn operations per claim from O(N×M×A) attribute matching loops.
+
+- :rocket: **Dead code cleanup** — removed unused error sets, duplicate code blocks, dead imports, dead Python bindings, and the entire unused `msdrg_data.zig` module.
+
 ---
 
 ## v0.1.6 — 2026-03-30

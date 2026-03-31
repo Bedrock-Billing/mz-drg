@@ -340,6 +340,10 @@ pub const MsdrgHacProcessor = struct {
         // NON_EXEMPT or UNKNOWN — process HACs
         try self.processHospitalAcquiredCondition(data, hospital_status, allocator);
 
+        // Rebuild mask after HAC modifications to SDX codes
+        data.deinitMask();
+        data.mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
+
         // If already marked ungroupable by a prior step, stop the chain
         if (data.final_result.return_code != .OK) {
             return chain.LinkResult{
@@ -541,15 +545,8 @@ pub const MsdrgHacProcessor = struct {
     fn evaluateHacConditions(self: *const MsdrgHacProcessor, data: *models.ProcessingData, hac: *models.Hac, allocator: std.mem.Allocator) !models.HacUsage {
         var hac_status = models.HacUsage.HAC_CRITERIA_NOT_MET;
 
-        // Build mask
-        var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
-        defer {
-            var it = mask.keyIterator();
-            while (it.next()) |key| {
-                allocator.free(key.*);
-            }
-            mask.deinit();
-        }
+        // Use pre-built mask
+        const mask = &data.mask.?;
 
         if (self.formula_data.getEntry(@intCast(hac.hac_number), self.version)) |entry| {
             const formulas = self.formula_data.getFormulas(entry);
@@ -569,7 +566,7 @@ pub const MsdrgHacProcessor = struct {
                 };
                 defer formula.Evaluator.free(root, allocator);
 
-                if (formula.Evaluator.evaluate(root, &mask, 0)) {
+                if (formula.Evaluator.evaluate(root, mask, 0)) {
                     hac_status = .HAC_CRITERIA_MET;
                     break;
                 }
@@ -757,6 +754,9 @@ test "MsdrgHacProcessor execution" {
     };
     try dx.hacs.append(allocator, hac);
     try data.sdx_codes.append(allocator, dx);
+
+    // Build mask for the HAC evaluator
+    data.mask = try grouping.MsdrgMaskBuilder.buildMask(&data, allocator);
 
     // 4. Execute
     try processor.processHospitalAcquiredCondition(&data, .NOT_EXEMPT, allocator);

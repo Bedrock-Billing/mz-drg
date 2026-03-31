@@ -14,6 +14,20 @@ const description = @import("description.zig");
 const gender = @import("gender.zig");
 const formula = @import("formula.zig");
 
+/// Chain link that builds the attribute mask once after preprocessing.
+/// Stored on ProcessingData for reuse by grouping, marking, and HAC.
+const BuildMask = struct {
+    pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
+        _ = ptr;
+        const data = context.data;
+        data.mask = try grouping.MsdrgMaskBuilder.buildMask(data, data.allocator);
+        return chain.LinkResult{
+            .context = context,
+            .continue_processing = true,
+        };
+    }
+};
+
 pub const GrouperChain = struct {
     // Data sources
     cluster_info: cluster.ClusterInfoData,
@@ -231,6 +245,9 @@ pub const GrouperChain = struct {
         const l_code_setup = try allocator.create(preprocess.CodeSetup);
         l_code_setup.* = preprocess.CodeSetup{};
 
+        const l_build_mask = try allocator.create(BuildMask);
+        l_build_mask.* = BuildMask{};
+
         const preprocessing_links = [_]chain.Link{
             chain.Link{ .ptr = l_clusters, .executeFn = preprocess.MsdrgClusters.execute, .deinitFn = makeDeinit(preprocess.MsdrgClusters) },
             chain.Link{ .ptr = l_proc_attr, .executeFn = preprocess.ProcedureAttributeProcessor.execute, .deinitFn = makeDeinit(preprocess.ProcedureAttributeProcessor) },
@@ -239,6 +256,7 @@ pub const GrouperChain = struct {
             chain.Link{ .ptr = l_exclusions, .executeFn = preprocess.MsdrgExclusions.execute, .deinitFn = makeDeinit(preprocess.MsdrgExclusions) },
             chain.Link{ .ptr = l_pdx_attr, .executeFn = preprocess.PdxAttributeProcessor.execute, .deinitFn = makeDeinit(preprocess.PdxAttributeProcessor) },
             chain.Link{ .ptr = l_life_status, .executeFn = preprocess.MsdrgLifeStatus.execute, .deinitFn = makeDeinit(preprocess.MsdrgLifeStatus) },
+            chain.Link{ .ptr = l_build_mask, .executeFn = BuildMask.execute, .deinitFn = makeDeinit(BuildMask) },
         };
         const preprocessing_link = try chain.createChain(allocator, &preprocessing_links);
 

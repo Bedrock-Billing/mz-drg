@@ -428,16 +428,8 @@ pub const GroupingExecutor = struct {
     ) !?struct { formula: formula.DrgFormula, severity: models.Severity, new_mdc: ?i32 } {
         std.log.debug("GroupingExecutor: Grouping for MDC {d}", .{mdc});
 
-        // 1. Build Mask
-        var mask = try MsdrgMaskBuilder.buildMask(data, allocator);
-
-        defer {
-            var it = mask.keyIterator();
-            while (it.next()) |key| {
-                allocator.free(key.*);
-            }
-            mask.deinit();
-        }
+        // 1. Use pre-built mask from data
+        const mask = &data.mask.?;
 
         // 2. Get Formulas for MDC
         if (formula_data.getEntry(mdc, version)) |entry| {
@@ -482,7 +474,7 @@ pub const GroupingExecutor = struct {
                 };
                 defer formula.Evaluator.free(root, allocator);
 
-                const is_match = formula.Evaluator.evaluate(root, &mask, mdc);
+                const is_match = formula.Evaluator.evaluate(root, mask, mdc);
 
                 // Remove severity from mask
                 _ = mask.remove(sev_key);

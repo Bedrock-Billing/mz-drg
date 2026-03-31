@@ -29,15 +29,8 @@ pub const InitialDiagnosisMarking = struct {
             const base = self.formula_data.mapped.base_ptr();
             const formula_str = drg_formula.getFormula(base);
 
-            // Rebuild mask
-            var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
-            defer {
-                var it = mask.keyIterator();
-                while (it.next()) |key| {
-                    allocator.free(key.*);
-                }
-                mask.deinit();
-            }
+            // Use pre-built mask
+            const mask = &data.mask.?;
 
             // Add severity to mask (Initial Severity)
             const sev_str = switch (data.initial_severity) {
@@ -47,6 +40,10 @@ pub const InitialDiagnosisMarking = struct {
             };
             const sev_key = try allocator.dupe(u8, sev_str);
             try mask.put(sev_key, 0);
+            defer {
+                _ = mask.remove(sev_key);
+                allocator.free(sev_key);
+            }
 
             // Parse formula
             var lexer = formula.Lexer.init(formula_str);
@@ -70,7 +67,7 @@ pub const InitialDiagnosisMarking = struct {
                 formula_attributes.deinit();
             }
 
-            _ = try formula.Evaluator.collectMatchedAttributes(root, &mask, &formula_attributes, allocator, data.initial_result.mdc orelse 0);
+            _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, data.initial_result.mdc orelse 0);
 
             // Create a mutable copy of keys to iterate and remove
             var remaining_attributes = std.StringHashMap(void).init(allocator);
@@ -256,15 +253,7 @@ pub const InitialProcedureMarking = struct {
             const base = self.formula_data.mapped.base_ptr();
             const formula_str = drg_formula.getFormula(base);
 
-            // Rebuild mask
-            var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
-            defer {
-                var it = mask.keyIterator();
-                while (it.next()) |key| {
-                    allocator.free(key.*);
-                }
-                mask.deinit();
-            }
+            const mask = &data.mask.?;
 
             const sev_str = switch (data.initial_severity) {
                 .MCC => "MCC",
@@ -273,6 +262,10 @@ pub const InitialProcedureMarking = struct {
             };
             const sev_key = try allocator.dupe(u8, sev_str);
             try mask.put(sev_key, 0);
+            defer {
+                _ = mask.remove(sev_key);
+                allocator.free(sev_key);
+            }
 
             // Parse formula
             var lexer = formula.Lexer.init(formula_str);
@@ -296,7 +289,7 @@ pub const InitialProcedureMarking = struct {
                 formula_attributes.deinit();
             }
 
-            _ = try formula.Evaluator.collectMatchedAttributes(root, &mask, &formula_attributes, allocator, mdc);
+            _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, mdc);
 
             // Filter attributes for Procedure Marking
             var proc_attributes: std.ArrayList([]const u8) = .empty;
@@ -517,15 +510,7 @@ pub const FinalDiagnosisMarking = struct {
             const base = self.formula_data.mapped.base_ptr();
             const formula_str = drg_formula.getFormula(base);
 
-            // Rebuild mask
-            var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
-            defer {
-                var it = mask.keyIterator();
-                while (it.next()) |key| {
-                    allocator.free(key.*);
-                }
-                mask.deinit();
-            }
+            const mask = &data.mask.?;
 
             // Add severity to mask (Final Severity)
             const sev_str = switch (data.final_severity) {
@@ -535,6 +520,10 @@ pub const FinalDiagnosisMarking = struct {
             };
             const sev_key = try allocator.dupe(u8, sev_str);
             try mask.put(sev_key, 0);
+            defer {
+                _ = mask.remove(sev_key);
+                allocator.free(sev_key);
+            }
 
             // Parse formula
             var lexer = formula.Lexer.init(formula_str);
@@ -558,7 +547,7 @@ pub const FinalDiagnosisMarking = struct {
                 formula_attributes.deinit();
             }
 
-            _ = try formula.Evaluator.collectMatchedAttributes(root, &mask, &formula_attributes, allocator, data.final_result.mdc orelse 0);
+            _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, data.final_result.mdc orelse 0);
 
             // Create a mutable copy of keys to iterate and remove
             var remaining_attributes = std.StringHashMap(void).init(allocator);
@@ -741,14 +730,7 @@ pub const FinalProcedureMarking = struct {
             const base = self.formula_data.mapped.base_ptr();
             const formula_str = drg_formula.getFormula(base);
 
-            var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
-            defer {
-                var it = mask.keyIterator();
-                while (it.next()) |key| {
-                    allocator.free(key.*);
-                }
-                mask.deinit();
-            }
+            const mask = &data.mask.?;
 
             const sev_str = switch (data.final_severity) {
                 .MCC => "MCC",
@@ -757,6 +739,10 @@ pub const FinalProcedureMarking = struct {
             };
             const sev_key = try allocator.dupe(u8, sev_str);
             try mask.put(sev_key, 0);
+            defer {
+                _ = mask.remove(sev_key);
+                allocator.free(sev_key);
+            }
 
             var lexer = formula.Lexer.init(formula_str);
             var tokens = try lexer.tokenize(allocator);
@@ -778,7 +764,7 @@ pub const FinalProcedureMarking = struct {
                 formula_attributes.deinit();
             }
 
-            _ = try formula.Evaluator.collectMatchedAttributes(root, &mask, &formula_attributes, allocator, mdc);
+            _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, mdc);
 
             var proc_attributes: std.ArrayList([]const u8) = .empty;
             defer proc_attributes.deinit(allocator);
@@ -1092,14 +1078,7 @@ fn commonDiagnosisFunctionMarking(
         const base = formula_data.mapped.base_ptr();
         const formula_str = drg_formula.getFormula(base);
 
-        var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
-        defer {
-            var it = mask.keyIterator();
-            while (it.next()) |key| {
-                allocator.free(key.*);
-            }
-            mask.deinit();
-        }
+        const mask = &data.mask.?;
 
         const sev = if (mark_flag == .MARKED_FOR_INITIAL) data.initial_severity else data.final_severity;
         const sev_str = switch (sev) {
@@ -1126,7 +1105,7 @@ fn commonDiagnosisFunctionMarking(
             }
             matched_attributes.deinit();
         }
-        _ = try formula.Evaluator.collectMatchedAttributes(root, &mask, &matched_attributes, allocator, 0);
+        _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &matched_attributes, allocator, 0);
 
         if (data.principal_dx) |*pdx| {
             markSigTrauma(&matched_attributes, data.sdx_codes.items, pdx, mark_flag, impact);
@@ -1256,14 +1235,7 @@ fn commonProcedureFunctionMarking(
         const base = formula_data.mapped.base_ptr();
         const formula_str = drg_formula.getFormula(base);
 
-        var mask = try grouping.MsdrgMaskBuilder.buildMask(data, allocator);
-        defer {
-            var it = mask.keyIterator();
-            while (it.next()) |key| {
-                allocator.free(key.*);
-            }
-            mask.deinit();
-        }
+        const mask = &data.mask.?;
 
         const sev = if (mark_flag == .MARKED_FOR_INITIAL) data.initial_severity else data.final_severity;
         const sev_str = switch (sev) {
@@ -1290,7 +1262,7 @@ fn commonProcedureFunctionMarking(
             }
             matched_attributes.deinit();
         }
-        _ = try formula.Evaluator.collectMatchedAttributes(root, &mask, &matched_attributes, allocator, 0);
+        _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &matched_attributes, allocator, 0);
 
         markStents(&matched_attributes, data.procedure_codes.items, mark_flag, impact);
         markVessels(&matched_attributes, data.procedure_codes.items, mark_flag, impact);

@@ -382,6 +382,22 @@ pub const ProcessingData = struct {
 
     allocator: std.mem.Allocator,
 
+    /// Attribute mask built from claim data. Built once after preprocessing,
+    /// rebuilt after HAC processing. Used by grouping, marking, and HAC evaluators.
+    mask: ?std.StringHashMap(u32) = null,
+
+    /// Free the current mask. Call before rebuilding with buildMask.
+    pub fn deinitMask(self: *ProcessingData) void {
+        if (self.mask) |*m| {
+            var it = m.keyIterator();
+            while (it.next()) |key| {
+                self.allocator.free(key.*);
+            }
+            m.deinit();
+            self.mask = null;
+        }
+    }
+
     pub fn init(allocator: std.mem.Allocator) ProcessingData {
         return ProcessingData{
             .principal_dx = null,
@@ -415,6 +431,14 @@ pub const ProcessingData = struct {
     }
 
     pub fn deinit(self: *ProcessingData) void {
+        if (self.mask) |*m| {
+            var it = m.keyIterator();
+            while (it.next()) |key| {
+                self.allocator.free(key.*);
+            }
+            m.deinit();
+        }
+
         if (self.principal_dx) |*dx| dx.deinit(self.allocator);
         if (self.principal_proc) |*pr| pr.deinit(self.allocator);
         if (self.admit_dx) |*dx| dx.deinit(self.allocator);

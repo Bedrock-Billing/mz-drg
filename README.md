@@ -23,7 +23,7 @@ The official CMS tools are Java applications. While accurate, they come with pra
 | | Java (CMS) | mz-drg |
 |---|---|---|
 | **Startup** | JVM warmup, seconds | Instant |
-| **Throughput (Ryzen 5 5600U)** | ~500 claims/sec | ~7,000+ claims/sec |
+| **Throughput (Ryzen 5 5600U)** | ~500 claims/sec | ~11,000+ claims/sec |
 | **Memory** | JVM heap overhead | Minimal, memory-mapped data |
 | **Dependencies** | JRE 17+, classpath management | Single shared library |
 | **Python integration** | JPype bridge (fragile) | Native ctypes (simple) |
