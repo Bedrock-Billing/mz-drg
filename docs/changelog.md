@@ -42,6 +42,22 @@ All notable changes to this project are documented here. This project adheres to
 
 - :rocket: **Dead code cleanup** — removed unused error sets, duplicate code blocks, dead imports, dead Python bindings, and the entire unused `msdrg_data.zig` module.
 
+### Correctness
+
+- :bug: **Discharge status enum synced to Java reference** — `DischargeStatus` enum in `models.zig` now matches `MsdrgDischargeStatus.java` exactly. Fixed enum name mismatches (`ANOTHER_TYPE_FACILITY` → `CUST_SUPP_CARE`, `LEFT_AMA` → `LEFT_AGAINST_MEDICAL_ADVICE`, etc.), added missing codes (69, 70), and fixed `formulaString` for NONE (was returning `"invalid_dstat"`, now returns null per Java).
+
+- :bug: **Ungroupable claims now assign DRG 999** — when the grouper sets a non-OK return code (e.g. `HAC_STATUS_INVALID_MULT_HACS_POA_NOT_Y_W`, `INVALID_DISCHARGE_STATUS`), the final DRG is now set to 999 (ungroupable) and MDC to 0, matching CMS standard behavior. Previously, DRG/MDC were left as null.
+
+- :bug: **Test claim generator fixed** — `generate_test_claims.py` now uses only the 36 valid CMS discharge status codes from `MsdrgDischargeStatus.java`. Previously, it included invalid codes (40, 41, 42) that caused spurious `INVALID_DISCHARGE_STATUS` mismatches in comparison testing.
+
+- :bug: **Comparison test: discharge status passthrough** — `compare_groupers.py` previously forced all non-1/20 discharge statuses to HOME (1) when building Java input. Now passes the actual status through to `getEnumFromInt()`, ensuring both Java and Zig receive identical inputs.
+
+- :bug: **Comparison test: PDX POA passthrough** — `compare_groupers.py` previously hardcoded `poa=Y` for all PDX codes. Now uses the claim's actual POA value.
+
+### Removed
+
+- **`python_client/` directory** — old standalone wrapper superseded by the proper `msdrg` package. Removed dead `msdrg.py` and `test_grouper.py` files, cleaned up fallback import in `compare_groupers.py`.
+
 ---
 
 ## v0.1.6 — 2026-03-30

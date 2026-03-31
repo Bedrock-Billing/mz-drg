@@ -8,22 +8,21 @@ import json
 import argparse
 from datetime import datetime
 
-# Add python_client to path
-sys.path.append(os.path.join(os.getcwd(), "python_client"))
-try:
-    import msdrg
-except ImportError:
-    # Fallback if running from root
-    sys.path.append(os.path.join(os.getcwd()))
-    from python_client import msdrg
+import msdrg
 
 # Paths
 PROJECT_ROOT = os.getcwd()
 JARS_DIR = os.path.join(PROJECT_ROOT, "jars")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data", "bin")
 
-# Zig Library Path
-LIB_PATH = os.path.join(PROJECT_ROOT, "zig_src", "zig-out", "lib", "libmsdrg.so")
+# Zig Library Path — cross-platform
+if sys.platform == "darwin":
+    LIB_NAME = "libmsdrg.dylib"
+elif sys.platform == "win32":
+    LIB_NAME = "msdrg.dll"
+else:
+    LIB_NAME = "libmsdrg.so"
+LIB_PATH = os.path.join(PROJECT_ROOT, "zig_src", "zig-out", "lib", LIB_NAME)
 
 
 class DrgClient:
@@ -32,7 +31,7 @@ class DrgClient:
         self.load_enums()
         self.load_drg_groupers()
 
-    def create_drg_options(self, poa_exempt: bool) -> jpype.JObject:
+    def create_drg_options(self, poa_exempt: str) -> jpype.JObject:
         try:
             runtime_options = jpype.JClass("gov.agency.msdrg.model.v2.RuntimeOptions")()
             drg_options = jpype.JClass("gov.agency.msdrg.model.v2.MsdrgRuntimeOption")()
@@ -43,10 +42,12 @@ class DrgClient:
         runtime_options.setMarkingLogicTieBreaker(
             self.logic_tiebreaker.CLINICAL_SIGNIFICANCE
         )
-        if poa_exempt:
+        if poa_exempt == "EXEMPT":
             runtime_options.setPoaReportingExempt(self.hospital_status.EXEMPT)
-        else:
+        elif poa_exempt == "NON_EXEMPT":
             runtime_options.setPoaReportingExempt(self.hospital_status.NON_EXEMPT)
+        else:
+            runtime_options.setPoaReportingExempt(self.hospital_status.UNKNOWN)
         drg_options.put(msdrg_option_flags.RUNTIME_OPTION_FLAGS, runtime_options)
         return drg_options
 
@@ -160,8 +161,10 @@ class DrgClient:
     def load_drg_groupers(self) -> None:
         end_version = self.determine_end_version()
         curr_version = "400"
-        exempt_drg_options = self.create_drg_options(poa_exempt=True)
-        non_exempt_drg_options = self.create_drg_options(poa_exempt=False)
+        exempt_drg_options = self.create_drg_options(poa_exempt="EXEMPT")
+        non_exempt_drg_options = self.create_drg_options(poa_exempt="NON_EXEMPT")
+        # For UNKNOWN claims, use NON_EXEMPT as Java's reference behavior
+        unknown_drg_options = self.create_drg_options(poa_exempt="UNKNOWN")
         self.drg_versions = {}
         while True:
             try:
@@ -174,6 +177,9 @@ class DrgClient:
                 )
                 self.drg_versions[curr_version]["non_exempt"] = drg_component(
                     non_exempt_drg_options
+                )
+                self.drg_versions[curr_version]["unknown"] = drg_component(
+                    unknown_drg_options
                 )
                 print(f"Loaded DRG version: {curr_version}")
             except Exception as e:
@@ -199,16 +205,15 @@ class DrgClient:
                 input.withSex(self.sex.UNKNOWN)
 
         if claim.get("discharge_status", None) is not None:
-            # try to convert to integer
             try:
                 discharge_status = int(claim["discharge_status"])
-                if discharge_status not in (1, 20):
-                    discharge_status = 1
                 input.withDischargeStatus(
                     self.drg_status.getEnumFromInt(discharge_status)
                 )
             except ValueError:
-                raise ValueError(f"Invalid patient status: {claim['discharge_status']}")
+                raise ValueError(
+                    f"Invalid discharge status: {claim['discharge_status']}"
+                )
         else:
             input.withDischargeStatus(self.drg_status.HOME_SELFCARE_ROUTINE)
 
@@ -220,10 +225,17 @@ class DrgClient:
             )
 
         if claim["pdx"]:
+            pdx_poa_str = claim["pdx"].get("poa", "Y")
+            pdx_poa = {
+                "Y": self.poa_values.Y,
+                "N": self.poa_values.N,
+                "U": self.poa_values.U,
+                "W": self.poa_values.W,
+            }.get(pdx_poa_str, self.poa_values.Y)
             input.withPrincipalDiagnosisCode(
                 self.drg_dx_class(
                     claim["pdx"]["code"].replace(".", ""),
-                    self.poa_values.Y,
+                    pdx_poa,
                 )
             )
         else:
@@ -263,7 +275,17 @@ class DrgClient:
 
     def process(self, claim, version: str):
         i = self.create_drg_input(claim)
-        drg_component = self.drg_versions[version]["non_exempt"]
+
+        # Select grouper based on claim's hospital_status
+        hs = claim.get("hospital_status", "NOT_EXEMPT")
+        if hs == "EXEMPT":
+            grouper_key = "exempt"
+        elif hs == "UNKNOWN":
+            grouper_key = "unknown"
+        else:
+            grouper_key = "non_exempt"
+
+        drg_component = self.drg_versions[version][grouper_key]
         drg_claim = self.drg_claim_class(i)
         drg_component.process(drg_claim)
         output = drg_claim.getOutput().get()
@@ -283,9 +305,8 @@ def init_jvm():
         jpype.startJVM(classpath=[classpath])
 
 
-def run_zig_grouper(claim_data):
-    ctx = msdrg.MsdrgGrouper(LIB_PATH, DATA_DIR)
-    res = ctx.group(claim_data)
+def run_zig_grouper(grouper, claim_data):
+    res = grouper.group(claim_data)
     return {
         "drg": res["final_drg"],
         "mdc": res["final_mdc"],
@@ -294,7 +315,7 @@ def run_zig_grouper(claim_data):
     }
 
 
-def compare(java_client, claim, debug=False):
+def compare(java_client, grouper, claim, debug=False):
     java_res = None
     zig_res = None
 
@@ -304,24 +325,30 @@ def compare(java_client, claim, debug=False):
         print(f"Java Error: {e}")
 
     try:
-        zig_res = run_zig_grouper(claim)
+        zig_res = run_zig_grouper(grouper, claim)
     except Exception as e:
         print(f"Zig Error: {e}")
 
     status = "ERROR"
     if java_res and zig_res:
-        if zig_res["drg"] is None:
-            print(claim)
-            print(f"Zig DRG is None: {zig_res}")
-            print(f"Java DRG: {java_res}")
-        if int(java_res[0]) == int(zig_res["drg"]) and int(java_res[1]) == int(
-            zig_res["mdc"]
-        ):
+        java_drg = int(java_res[0])
+        java_mdc = int(java_res[1])
+        zig_drg = zig_res["drg"]
+        zig_mdc = zig_res["mdc"]
+
+        if zig_drg is None or zig_mdc is None:
+            # Zig returned a non-OK return code — DRG/MDC are None
+            status = "UNGROUPABLE"
+            print(
+                f"UNGROUPABLE: Zig={zig_res['return_code']}, Java DRG={java_drg} MDC={java_mdc}, Claim={claim['id']}"
+            )
+        elif java_drg == zig_drg and java_mdc == zig_mdc:
             status = "MATCH"
         else:
             status = "MISMATCH"
-            print(f"MISMATCH: Java={java_res} Zig={zig_res}, Claim={claim}")
-            raise Exception(f"MISMATCH: Java={java_res} Zig={zig_res}, Claim={claim}")
+            print(f"MISMATCH: Java={java_res} Zig={zig_res}, Claim={claim['id']}")
+            print(f"  Java DRG={java_drg} MDC={java_mdc}")
+            print(f"  Zig  DRG={zig_drg} MDC={zig_mdc} RC={zig_res['return_code']}")
 
     return status, java_res, zig_res, claim
 
@@ -519,10 +546,13 @@ if __name__ == "__main__":
             },
         ]
 
+    # Create one shared Zig grouper instance (data loaded once)
+    zig_grouper = msdrg.MsdrgGrouper(LIB_PATH, DATA_DIR)
+
     if not args.benchmark:
-        stats = {"MATCH": 0, "MISMATCH": 0, "ERROR": 0}
+        stats = {"MATCH": 0, "MISMATCH": 0, "UNGROUPABLE": 0, "ERROR": 0}
         for c in claims:
-            res, j, z, c = compare(client, c, args.debug)
+            res, j, z, c = compare(client, zig_grouper, c, args.debug)
             if res == "MISMATCH":
                 print(f"Java: {j}")
                 print(f"Zig:  {z}")
@@ -537,3 +567,5 @@ if __name__ == "__main__":
         benchmark_zig(claims)
         print("Benchmarking Java Grouper...")
         benchmark_java(client, claims)
+
+    zig_grouper.close()

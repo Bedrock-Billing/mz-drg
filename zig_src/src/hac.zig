@@ -497,7 +497,7 @@ pub const MsdrgHacProcessor = struct {
             }
 
             if (mark_ungroupable) {
-                data.final_result.return_code = .HAC_MISSING_ONE_POA;
+                data.final_result.setReturnCode(.HAC_MISSING_ONE_POA);
                 try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
                 return;
             }
@@ -518,19 +518,19 @@ pub const MsdrgHacProcessor = struct {
                         }
                         if (poa_counter >= 2) {
                             sdx.initial_severity_flag = .NEITHER;
-                            data.final_result.return_code = .HAC_STATUS_INVALID_MULT_HACS_POA_NOT_Y_W;
+                            data.final_result.setReturnCode(.HAC_STATUS_INVALID_MULT_HACS_POA_NOT_Y_W);
                             try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
                             return;
                         }
                         if (sdx.poa == 'N' or sdx.poa == 'U') {
                             sdx.initial_severity_flag = .NEITHER;
-                            data.final_result.return_code = .HAC_STATUS_INVALID_POA_N_OR_U;
+                            data.final_result.setReturnCode(.HAC_STATUS_INVALID_POA_N_OR_U);
                             try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
                             return;
                         }
                         if (sdx.poa == 0 or sdx.poa == ' ' or sdx.poa == 'E' or sdx.poa == '1') {
                             sdx.initial_severity_flag = .NEITHER;
-                            data.final_result.return_code = .HAC_STATUS_INVALID_POA_INVALID_OR_1;
+                            data.final_result.setReturnCode(.HAC_STATUS_INVALID_POA_INVALID_OR_1);
                             try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
                             return;
                         }

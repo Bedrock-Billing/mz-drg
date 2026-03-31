@@ -203,8 +203,8 @@ pub const MsdrgLifeStatus = struct {
 
             if (has_mcc_alive and data.discharge_status == .NONE) {
                 // Invalid discharge status
-                data.initial_result.return_code = .INVALID_DISCHARGE_STATUS;
-                data.final_result.return_code = .INVALID_DISCHARGE_STATUS;
+                data.initial_result.setReturnCode(.INVALID_DISCHARGE_STATUS);
+                data.final_result.setReturnCode(.INVALID_DISCHARGE_STATUS);
                 return chain.LinkResult{
                     .context = context,
                     .continue_processing = false,

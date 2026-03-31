@@ -49,11 +49,16 @@ pub const DischargeStatus = enum(i32) {
 
     pub fn formulaString(self: DischargeStatus) ?[]const u8 {
         return switch (self) {
-            .NONE => "invalid_dstat",
+            .NONE => null,
             .LEFT_AGAINST_MEDICAL_ADVICE => "AMA",
             .DIED => "DIED",
             else => null,
         };
+    }
+
+    /// Convert integer to DischargeStatus. Returns null for invalid codes.
+    pub fn fromInt(val: i32) ?DischargeStatus {
+        return std.meta.intToEnum(DischargeStatus, val) catch null;
     }
 };
 
@@ -361,6 +366,15 @@ pub const GrouperResult = struct {
     mdc_description: ?[]const u8,
     reroute_mdc_id: ?i32,
     return_code: GrouperReturnCode,
+
+    /// Set a non-OK return code. Automatically assigns DRG 999 (ungroupable) and MDC 0.
+    pub fn setReturnCode(self: *GrouperResult, rc: GrouperReturnCode) void {
+        self.return_code = rc;
+        if (rc != .OK) {
+            self.drg = 999;
+            self.mdc = 0;
+        }
+    }
 };
 
 pub const ProcessingData = struct {
