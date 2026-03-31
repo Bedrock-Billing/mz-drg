@@ -4,7 +4,7 @@ All notable changes to this project are documented here. This project adheres to
 
 ---
 
-## v0.1.7 — 2026-03-30
+## v0.1.7 — 2026-03-31
 
 ### Added
 
