@@ -48,6 +48,11 @@ def _check_diagnosis(value: Any, field: str) -> None:
             f"'{field}[\"code\"]' must be a str, "
             f"got {type(value['code']).__name__}: {value['code']!r}"
         )
+    if "poa" in value and value["poa"] is not None:
+        if value["poa"] not in ("Y", "N", "U", "W", " "):
+            raise ValueError(
+                f"'{field}[\"poa\"]' must be one of Y, N, U, W, got {value['poa']!r}"
+            )
 
 
 def _check_diagnosis_list(value: Any, field: str) -> None:
@@ -76,6 +81,11 @@ def _check_procedure_list(value: Any, field: str) -> None:
             raise ValueError(
                 f"'{field}[{i}]' dict must have a 'code' key, got keys: {list(item.keys())}"
             )
+        if not isinstance(item["code"], str):
+            raise ValueError(
+                f"'{field}[{i}][\"code\"]' must be a str, "
+                f"got {type(item['code']).__name__}: {item['code']!r}"
+            )
 
 
 def validate_claim(claim: dict[str, Any]) -> None:
@@ -103,6 +113,20 @@ def validate_claim(claim: dict[str, Any]) -> None:
 
     if "discharge_status" in claim:
         _check_int(claim["discharge_status"], "discharge_status")
+
+    if "hospital_status" in claim:
+        if claim["hospital_status"] not in ("EXEMPT", "NOT_EXEMPT", "UNKNOWN"):
+            raise ValueError(
+                f"'hospital_status' must be one of EXEMPT, NOT_EXEMPT, UNKNOWN, "
+                f"got {claim['hospital_status']!r}"
+            )
+
+    if "tie_breaker" in claim:
+        if claim["tie_breaker"] not in ("CLINICAL_SIGNIFICANCE", "ALPHABETICAL"):
+            raise ValueError(
+                f"'tie_breaker' must be one of CLINICAL_SIGNIFICANCE, ALPHABETICAL, "
+                f"got {claim['tie_breaker']!r}"
+            )
 
     _check_diagnosis(claim["pdx"], "pdx")
 
@@ -133,6 +157,19 @@ def validate_mce_claim(claim: dict[str, Any]) -> None:
 
     # Type checks
     _check_int(claim["discharge_date"], "discharge_date")
+    ds_date = claim["discharge_date"]
+    if ds_date < 20000101 or ds_date > 21001231:
+        raise ValueError(
+            f"'discharge_date' must be YYYYMMDD between 20000101 and 21001231, "
+            f"got {ds_date}"
+        )
+
+    if "icd_version" in claim:
+        _check_int(claim["icd_version"], "icd_version")
+        if claim["icd_version"] not in (9, 10):
+            raise ValueError(
+                f"'icd_version' must be 9 or 10, got {claim['icd_version']}"
+            )
 
     if "age" in claim:
         _check_int(claim["age"], "age")
