@@ -289,11 +289,14 @@ class DrgClient:
         drg_claim = self.drg_claim_class(i)
         drg_component.process(drg_claim)
         output = drg_claim.getOutput().get()
-        return (
-            str(output.getFinalDrg().getValue()),
-            str(output.getFinalMdc().getValue()),
-            str(output.getFinalGrc().name()),
-        )
+
+        return {
+            "initial_drg": int(str(output.getInitialDrg().getValue())),
+            "initial_mdc": int(str(output.getInitialMdc().getValue())),
+            "final_drg": int(str(output.getFinalDrg().getValue())),
+            "final_mdc": int(str(output.getFinalMdc().getValue())),
+            "return_code": str(output.getFinalGrc().name()),
+        }
 
 
 def init_jvm():
@@ -308,8 +311,10 @@ def init_jvm():
 def run_zig_grouper(grouper, claim_data):
     res = grouper.group(claim_data)
     return {
-        "drg": res["final_drg"],
-        "mdc": res["final_mdc"],
+        "initial_drg": res["initial_drg"],
+        "initial_mdc": res["initial_mdc"],
+        "final_drg": res["final_drg"],
+        "final_mdc": res["final_mdc"],
         "return_code": res["return_code"],
         "full_res": res,
     }
@@ -331,24 +336,31 @@ def compare(java_client, grouper, claim, debug=False):
 
     status = "ERROR"
     if java_res and zig_res:
-        java_drg = int(java_res[0])
-        java_mdc = int(java_res[1])
-        zig_drg = zig_res["drg"]
-        zig_mdc = zig_res["mdc"]
+        zig_drg = zig_res["final_drg"]
+        zig_mdc = zig_res["final_mdc"]
 
         if zig_drg is None or zig_mdc is None:
             # Zig returned a non-OK return code — DRG/MDC are None
             status = "UNGROUPABLE"
             print(
-                f"UNGROUPABLE: Zig={zig_res['return_code']}, Java DRG={java_drg} MDC={java_mdc}, Claim={claim['id']}"
+                f"UNGROUPABLE: Zig={zig_res['return_code']}, Java DRG={java_res['final_drg']} MDC={java_res['final_mdc']}, Claim={claim['id']}"
             )
-        elif java_drg == zig_drg and java_mdc == zig_mdc:
+        elif (
+            java_res["final_drg"] == zig_drg
+            and java_res["final_mdc"] == zig_mdc
+            and java_res["initial_drg"] == zig_res["initial_drg"]
+            and java_res["initial_mdc"] == zig_res["initial_mdc"]
+        ):
             status = "MATCH"
         else:
             status = "MISMATCH"
-            print(f"MISMATCH: Java={java_res} Zig={zig_res}, Claim={claim['id']}")
-            print(f"  Java DRG={java_drg} MDC={java_mdc}")
-            print(f"  Zig  DRG={zig_drg} MDC={zig_mdc} RC={zig_res['return_code']}")
+            print(f"MISMATCH: Claim={claim['id']}")
+            print(
+                f"  Java: initial={java_res['initial_drg']}/{java_res['initial_mdc']} final={java_res['final_drg']}/{java_res['final_mdc']} rc={java_res['return_code']}"
+            )
+            print(
+                f"  Zig:  initial={zig_res['initial_drg']}/{zig_res['initial_mdc']} final={zig_res['final_drg']}/{zig_res['final_mdc']} rc={zig_res['return_code']}"
+            )
 
     return status, java_res, zig_res, claim
 

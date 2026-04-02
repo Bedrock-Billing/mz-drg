@@ -4,6 +4,25 @@ All notable changes to this project are documented here. This project adheres to
 
 ---
 
+## v0.1.8 — 2026-04-02
+
+### Added
+
+- **Expanded comparison testing** — `compare_groupers.py` now validates initial DRG, initial MDC, final DRG, and final MDC against the Java reference (previously only checked final DRG/MDC). The Java `process()` method now returns a structured dict with all four values.
+
+- **New output fields** — `GroupResult` and the JSON API now expose `initial_base_drg`, `final_base_drg`, `initial_return_code`, `initial_severity`, and `final_severity`, matching fields available on the Java `MsdrgOutput` class.
+
+### Input Validation
+
+- **`hospital_status`** — must be `EXEMPT`, `NOT_EXEMPT`, or `UNKNOWN` (was silently defaulting to `NOT_EXEMPT`)
+- **`tie_breaker`** — must be `CLINICAL_SIGNIFICANCE` or `ALPHABETICAL`
+- **POA indicators** — must be `Y`, `N`, `U`, `W`, or space (unchecked)
+- **Procedure `code`** — must be a string (was only checking existence)
+- **MCE `icd_version`** — must be 9 or 10
+- **MCE `discharge_date`** — must be YYYYMMDD between 20000101 and 21001231
+
+---
+
 ## v0.1.7 — 2026-03-31
 
 ### Added

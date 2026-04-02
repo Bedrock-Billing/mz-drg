@@ -83,14 +83,19 @@ class GroupResult(TypedDict, total=False):
     """
 
     initial_drg: int | None
-    final_drg: int | None
     initial_mdc: int | None
-    final_mdc: int | None
+    initial_base_drg: int | None
     initial_drg_description: str | None
-    final_drg_description: str | None
     initial_mdc_description: str | None
+    initial_return_code: str
+    initial_severity: str
+    final_drg: int | None
+    final_mdc: int | None
+    final_base_drg: int | None
+    final_drg_description: str | None
     final_mdc_description: str | None
     return_code: str
+    final_severity: str
     pdx_output: DiagnosisOutput | None
     sdx_output: list[DiagnosisOutput]
     proc_output: list[ProcedureOutput]
