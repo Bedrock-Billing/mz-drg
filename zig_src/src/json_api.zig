@@ -44,6 +44,13 @@ pub const OutputResult = struct {
     proc_output: []const ProcedureOutput = &.{},
 };
 
+pub const HacOutput = struct {
+    hac_number: i32,
+    hac_list: []const u8,
+    hac_status: []const u8,
+    description: []const u8,
+};
+
 pub const DiagnosisOutput = struct {
     code: []const u8,
     mdc: ?i32,
@@ -51,6 +58,7 @@ pub const DiagnosisOutput = struct {
     drg_impact: []const u8,
     poa_error: []const u8,
     flags: []const []const u8,
+    hacs: []const HacOutput = &.{},
 };
 
 pub const ProcedureOutput = struct {
@@ -97,6 +105,16 @@ fn mapDiagnosisOutput(arena: std.mem.Allocator, dx: models.DiagnosisCode) !Diagn
         }
     }
 
+    var hacs_list: std.ArrayListUnmanaged(HacOutput) = .empty;
+    for (dx.hacs.items) |hac| {
+        try hacs_list.append(arena, HacOutput{
+            .hac_number = hac.hac_number,
+            .hac_list = try arena.dupe(u8, hac.hac_list),
+            .hac_status = @tagName(hac.hac_status),
+            .description = try arena.dupe(u8, hac.description),
+        });
+    }
+
     return DiagnosisOutput{
         .code = try arena.dupe(u8, dx.value.toSlice()),
         .mdc = dx.mdc,
@@ -104,6 +122,7 @@ fn mapDiagnosisOutput(arena: std.mem.Allocator, dx: models.DiagnosisCode) !Diagn
         .drg_impact = @tagName(dx.drg_impact),
         .poa_error = @tagName(dx.poa_error_code_flag),
         .flags = try flags_list.toOwnedSlice(arena),
+        .hacs = try hacs_list.toOwnedSlice(arena),
     };
 }
 

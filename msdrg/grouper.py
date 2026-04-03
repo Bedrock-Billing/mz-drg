@@ -55,6 +55,15 @@ class ClaimInput(TypedDict, total=False):
 # ---------------------------------------------------------------------------
 
 
+class HacOutputs(TypedDict, total=False):
+    """HAC status for a diagnosis code."""
+
+    hac_number: int
+    hac_list: str
+    hac_status: str
+    description: str
+
+
 class DiagnosisOutput(TypedDict, total=False):
     """Grouper output for a single diagnosis code."""
 
@@ -64,6 +73,7 @@ class DiagnosisOutput(TypedDict, total=False):
     drg_impact: str
     poa_error: str
     flags: list[str]
+    hacs: list[HacOutputs]
 
 
 class ProcedureOutput(TypedDict, total=False):
