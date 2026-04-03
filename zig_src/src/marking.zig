@@ -4,165 +4,237 @@ const formula = @import("formula.zig");
 const chain = @import("chain.zig");
 const grouping = @import("grouping.zig");
 
+fn getWinningFormula(ctx: models.GroupingContext) ?formula.DrgFormula {
+    if (ctx.pdx_match) |f| return f;
+    if (ctx.reroute_match) |f| return f;
+    if (ctx.pre_match) |f| return f;
+    return null;
+}
+
+fn updateImpactDirection(code: anytype, impact: models.GroupingImpact) void {
+    if (impact == .INITIAL) {
+        if (code.drg_impact == .FINAL) {
+            code.drg_impact = .BOTH;
+        } else if (code.drg_impact == .NONE) {
+            code.drg_impact = .INITIAL;
+        }
+    } else if (impact == .FINAL) {
+        if (code.drg_impact == .INITIAL) {
+            code.drg_impact = .BOTH;
+        } else if (code.drg_impact == .NONE) {
+            code.drg_impact = .FINAL;
+        }
+    }
+}
+
+fn markDiagnosisCodes(
+    context: models.ProcessingContext,
+    grouping_ctx: models.GroupingContext,
+    formula_data: *const formula.FormulaData,
+    allocator: std.mem.Allocator,
+    mark_flag: models.CodeFlag,
+    impact: models.GroupingImpact,
+    severity: models.Severity,
+    mdc: i32,
+) !void {
+    const data = context.data;
+
+    const winning_formula = getWinningFormula(grouping_ctx);
+    if (winning_formula == null) {
+        std.log.debug("DiagnosisMarking: No winning formula found.", .{});
+        return;
+    }
+
+    const drg_formula = winning_formula.?;
+    std.log.debug("DiagnosisMarking: Winning formula found for DRG {d}", .{drg_formula.drg});
+
+    const base = formula_data.mapped.base_ptr();
+    const formula_str = drg_formula.getFormula(base);
+
+    const mask = &data.mask.?;
+
+    const sev_str = switch (severity) {
+        .MCC => "MCC",
+        .CC => "CC",
+        .NONE => "NONE",
+    };
+    const sev_key = try allocator.dupe(u8, sev_str);
+    try mask.put(sev_key, 0);
+    defer {
+        _ = mask.remove(sev_key);
+        allocator.free(sev_key);
+    }
+
+    var lexer = formula.Lexer.init(formula_str);
+    var tokens = try lexer.tokenize(allocator);
+    defer tokens.deinit(allocator);
+
+    var parser = formula.Parser.init(allocator, tokens.items);
+    const root = parser.parse() catch |err| {
+        std.debug.print("Error parsing formula: {s}\n", .{formula_str});
+        return err;
+    };
+    defer formula.Evaluator.free(root, allocator);
+
+    var formula_attributes = std.StringHashMap(void).init(allocator);
+    defer {
+        var it = formula_attributes.keyIterator();
+        while (it.next()) |key| {
+            allocator.free(key.*);
+        }
+        formula_attributes.deinit();
+    }
+
+    _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, mdc);
+
+    var remaining_attributes = std.StringHashMap(void).init(allocator);
+    defer remaining_attributes.deinit();
+
+    var it = formula_attributes.keyIterator();
+    while (it.next()) |key| {
+        try remaining_attributes.put(key.*, {});
+    }
+
+    for (data.sdx_codes.items) |*sdx| {
+        var matched_attr_key: ?[]const u8 = null;
+        var matched_attr_obj: ?models.Attribute = null;
+
+        var it_rem = remaining_attributes.keyIterator();
+        while (it_rem.next()) |key_ptr| {
+            const attr_str = key_ptr.*;
+
+            if (data.principal_dx) |pdx| {
+                if (std.mem.indexOf(u8, attr_str, ":") == null) {
+                    var pdx_has = false;
+                    for (pdx.attributes.items) |a| {
+                        if (std.mem.eql(u8, a.list_name, attr_str)) {
+                            pdx_has = true;
+                            break;
+                        }
+                    }
+                    if (pdx_has) continue;
+                }
+            }
+
+            if (std.mem.eql(u8, attr_str, "MCC") or std.mem.eql(u8, attr_str, "CC")) {
+                if (sdx.is(.DOWNGRADE_SEVERITY_SUPPRESSION) or sdx.is(.EXCLUDED) or sdx.is(.DEATH_EXCLUSION)) continue;
+
+                const sdx_sev_str = switch (sdx.severity) {
+                    .MCC => "MCC",
+                    .CC => "CC",
+                    .NONE => "NONE",
+                };
+                if (std.mem.eql(u8, sdx_sev_str, attr_str)) {
+                    matched_attr_key = attr_str;
+                    break;
+                }
+            }
+
+            var has_attr = false;
+            var check_str = attr_str;
+            if (std.mem.startsWith(u8, attr_str, "SDX:")) {
+                check_str = attr_str[4..];
+            }
+
+            for (sdx.attributes.items) |a| {
+                if (a.matchesString(check_str)) {
+                    has_attr = true;
+                    matched_attr_obj = a;
+                    break;
+                }
+            }
+            if (!has_attr) {
+                for (sdx.dx_cat_attributes.items) |a| {
+                    if (a.matchesString(check_str)) {
+                        has_attr = true;
+                        matched_attr_obj = a;
+                        break;
+                    }
+                }
+            }
+
+            if (has_attr) {
+                matched_attr_key = attr_str;
+                break;
+            }
+        }
+
+        if (matched_attr_key) |key| {
+            std.log.debug("DiagnosisMarking: Marking SDX {s} for attribute {s}", .{ sdx.value.toSlice(), key });
+            sdx.mark(mark_flag);
+            sdx.attribute_marked_for = matched_attr_obj;
+            updateImpactDirection(sdx, impact);
+            _ = remaining_attributes.remove(key);
+        }
+    }
+}
+
+fn markDiagnosisCodesFinalExtra(context: models.ProcessingContext) !void {
+    const data = context.data;
+
+    const final_drg = getWinningDrg(context.final_grouping_context);
+    const initial_drg = getWinningDrg(context.initial_grouping_context);
+
+    if (final_drg != null and initial_drg != null and final_drg.? != initial_drg.?) {
+        for (data.sdx_codes.items) |*sdx| {
+            if (sdx.hacs.items.len > 0) {
+                sdx.mark(.MARKED_FOR_FINAL);
+                updateImpactDirection(sdx, .FINAL);
+            }
+        }
+    }
+
+    var return_code = models.GrouperReturnCode.OK;
+    if (data.final_result.return_code != .OK) {
+        return_code = data.final_result.return_code;
+    }
+
+    if (return_code == .OK) {
+        if (data.principal_dx) |*pdx| {
+            pdx.drg_impact = .BOTH;
+            pdx.mark(.MARKED_FOR_INITIAL);
+            pdx.mark(.MARKED_FOR_FINAL);
+        }
+    }
+
+    const hospital_status = context.runtime.poa_reporting_exempt;
+    for (data.sdx_codes.items) |*sdx| {
+        const excluded = sdx.is(.EXCLUDED);
+        const death_excluded = sdx.is(.DEATH_EXCLUSION);
+        const is_hac_val = isHac(sdx, hospital_status);
+
+        if (sdx.severity != .NONE and !excluded and !death_excluded and is_hac_val) {
+            sdx.markSeverityFlag(.FINAL);
+        } else if (excluded and !death_excluded) {
+            sdx.markSeverityFlag(.FINAL);
+        } else if (!excluded and !death_excluded and sdx.severity != .NONE) {
+            sdx.markSeverityFlag(.FINAL);
+        }
+        if ((excluded or death_excluded) and sdx.severity != .NONE) {
+            sdx.markSeverityFlag(.FINAL);
+        }
+    }
+}
+
 pub const InitialDiagnosisMarking = struct {
     formula_data: *const formula.FormulaData,
 
     pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
-        const data = context.data;
-        const allocator = context.allocator;
 
         std.log.debug("InitialDiagnosisMarking: Executing...", .{});
 
-        // Determine the winning formula
-        var winning_formula: ?formula.DrgFormula = null;
-        if (context.initial_grouping_context.pdx_match) |f| {
-            winning_formula = f;
-        } else if (context.initial_grouping_context.reroute_match) |f| {
-            winning_formula = f;
-        } else if (context.initial_grouping_context.pre_match) |f| {
-            winning_formula = f;
-        }
+        try markDiagnosisCodes(
+            context,
+            context.initial_grouping_context,
+            self.formula_data,
+            context.allocator,
+            .MARKED_FOR_INITIAL,
+            .INITIAL,
+            context.data.initial_severity,
+            context.data.initial_result.mdc orelse 0,
+        );
 
-        if (winning_formula) |drg_formula| {
-            std.log.debug("InitialDiagnosisMarking: Winning formula found for DRG {d}", .{drg_formula.drg});
-            const base = self.formula_data.mapped.base_ptr();
-            const formula_str = drg_formula.getFormula(base);
-
-            // Use pre-built mask
-            const mask = &data.mask.?;
-
-            // Add severity to mask (Initial Severity)
-            const sev_str = switch (data.initial_severity) {
-                .MCC => "MCC",
-                .CC => "CC",
-                .NONE => "NONE",
-            };
-            const sev_key = try allocator.dupe(u8, sev_str);
-            try mask.put(sev_key, 0);
-            defer {
-                _ = mask.remove(sev_key);
-                allocator.free(sev_key);
-            }
-
-            // Parse formula
-            var lexer = formula.Lexer.init(formula_str);
-            var tokens = try lexer.tokenize(allocator);
-            defer tokens.deinit(allocator);
-
-            var parser = formula.Parser.init(allocator, tokens.items);
-            const root = parser.parse() catch |err| {
-                std.debug.print("Error parsing formula: {s}\n", .{formula_str});
-                return err;
-            };
-            defer formula.Evaluator.free(root, allocator);
-
-            // Collect matched attributes
-            var formula_attributes = std.StringHashMap(void).init(allocator);
-            defer {
-                var it = formula_attributes.keyIterator();
-                while (it.next()) |key| {
-                    allocator.free(key.*);
-                }
-                formula_attributes.deinit();
-            }
-
-            _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, data.initial_result.mdc orelse 0);
-
-            // Create a mutable copy of keys to iterate and remove
-            var remaining_attributes = std.StringHashMap(void).init(allocator);
-            defer remaining_attributes.deinit();
-
-            var it = formula_attributes.keyIterator();
-            while (it.next()) |key| {
-                try remaining_attributes.put(key.*, {});
-            }
-
-            // Iterate SDX codes
-            for (data.sdx_codes.items) |*sdx| {
-                var matched_attr_key: ?[]const u8 = null;
-                var matched_attr_obj: ?models.Attribute = null;
-
-                var it_rem = remaining_attributes.keyIterator();
-                while (it_rem.next()) |key_ptr| {
-                    const attr_str = key_ptr.*;
-
-                    // Check PDX logic
-                    if (data.principal_dx) |pdx| {
-                        if (std.mem.indexOf(u8, attr_str, ":") == null) {
-                            var pdx_has = false;
-                            for (pdx.attributes.items) |a| {
-                                if (std.mem.eql(u8, a.list_name, attr_str)) {
-                                    pdx_has = true;
-                                    break;
-                                }
-                            }
-                            if (pdx_has) continue;
-                        }
-                    }
-
-                    // Check MCC/CC
-                    if (std.mem.eql(u8, attr_str, "MCC") or std.mem.eql(u8, attr_str, "CC")) {
-                        if (sdx.is(.DOWNGRADE_SEVERITY_SUPPRESSION) or sdx.is(.EXCLUDED) or sdx.is(.DEATH_EXCLUSION)) continue;
-
-                        const sdx_sev_str = switch (sdx.severity) {
-                            .MCC => "MCC",
-                            .CC => "CC",
-                            .NONE => "NONE",
-                        };
-                        if (std.mem.eql(u8, sdx_sev_str, attr_str)) {
-                            matched_attr_key = attr_str;
-                            break;
-                        }
-                    }
-
-                    // Check normal attributes
-                    var has_attr = false;
-                    var check_str = attr_str;
-                    if (std.mem.startsWith(u8, attr_str, "SDX:")) {
-                        check_str = attr_str[4..];
-                    }
-
-                    for (sdx.attributes.items) |a| {
-                        if (a.matchesString(check_str)) {
-                            has_attr = true;
-                            matched_attr_obj = a;
-                            break;
-                        }
-                    }
-                    if (!has_attr) {
-                        for (sdx.dx_cat_attributes.items) |a| {
-                            if (a.matchesString(check_str)) {
-                                has_attr = true;
-                                matched_attr_obj = a;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (has_attr) {
-                        matched_attr_key = attr_str;
-                        break;
-                    }
-                }
-
-                if (matched_attr_key) |key| {
-                    std.log.debug("InitialDiagnosisMarking: Marking SDX {s} for attribute {s}", .{ sdx.value.toSlice(), key });
-                    sdx.mark(.MARKED_FOR_INITIAL);
-                    sdx.attribute_marked_for = matched_attr_obj;
-
-                    if (sdx.drg_impact == .FINAL) {
-                        sdx.drg_impact = .BOTH;
-                    } else if (sdx.drg_impact == .NONE) {
-                        sdx.drg_impact = .INITIAL;
-                    }
-
-                    _ = remaining_attributes.remove(key);
-                }
-            }
-        } else {
-            std.log.debug("InitialDiagnosisMarking: No winning formula found.", .{});
-        }
         return chain.LinkResult{
             .context = context,
             .continue_processing = true,
@@ -180,13 +252,9 @@ fn isUnrelated(drg: i32) bool {
     return false;
 }
 
-fn markProcedure(proc: *models.ProcedureCode) void {
-    proc.mark(.MARKED_FOR_INITIAL);
-    if (proc.drg_impact == .FINAL) {
-        proc.drg_impact = .BOTH;
-    } else if (proc.drg_impact == .NONE) {
-        proc.drg_impact = .INITIAL;
-    }
+fn markProcedure(proc: *models.ProcedureCode, mark_flag: models.CodeFlag, impact: models.GroupingImpact) void {
+    proc.mark(mark_flag);
+    updateImpactDirection(proc, impact);
 }
 
 fn hasAttribute(proc: *models.ProcedureCode, attr_str: []const u8) bool {
@@ -217,253 +285,261 @@ fn hasAllAttributes(proc: *models.ProcedureCode, required: [][]const u8) bool {
     return true;
 }
 
+fn calculateMdc(drg_formula: formula.DrgFormula, data: *const models.ProcessingData) i32 {
+    var mdc: i32 = drg_formula.reroute_mdc_id;
+    if (mdc == 0) {
+        if (data.principal_dx) |pdx| {
+            if (pdx.mdc) |m| mdc = m;
+        }
+    }
+    if (isUnrelated(drg_formula.drg)) {
+        mdc = 29;
+    }
+    return mdc;
+}
+
+fn markProcedureCodes(
+    context: models.ProcessingContext,
+    grouping_ctx: models.GroupingContext,
+    formula_data: *const formula.FormulaData,
+    allocator: std.mem.Allocator,
+    mark_flag: models.CodeFlag,
+    impact: models.GroupingImpact,
+    severity: models.Severity,
+) !i32 {
+    const data = context.data;
+
+    const winning_formula = getWinningFormula(grouping_ctx);
+    if (winning_formula == null) {
+        std.log.debug("ProcedureMarking: No winning formula found.", .{});
+        return 0;
+    }
+
+    const drg_formula = winning_formula.?;
+    std.log.debug("ProcedureMarking: Winning formula found for DRG {d}", .{drg_formula.drg});
+
+    const mdc = calculateMdc(drg_formula, data);
+
+    const base = formula_data.mapped.base_ptr();
+    const formula_str = drg_formula.getFormula(base);
+
+    const mask = &data.mask.?;
+
+    const sev_str = switch (severity) {
+        .MCC => "MCC",
+        .CC => "CC",
+        .NONE => "NONE",
+    };
+    const sev_key = try allocator.dupe(u8, sev_str);
+    try mask.put(sev_key, 0);
+    defer {
+        _ = mask.remove(sev_key);
+        allocator.free(sev_key);
+    }
+
+    var lexer = formula.Lexer.init(formula_str);
+    var tokens = try lexer.tokenize(allocator);
+    defer tokens.deinit(allocator);
+
+    var parser = formula.Parser.init(allocator, tokens.items);
+    const root = parser.parse() catch |err| {
+        std.debug.print("Error parsing formula: {s}\n", .{formula_str});
+        return err;
+    };
+    defer formula.Evaluator.free(root, allocator);
+
+    var formula_attributes = std.StringHashMap(void).init(allocator);
+    defer {
+        var it = formula_attributes.keyIterator();
+        while (it.next()) |key| {
+            allocator.free(key.*);
+        }
+        formula_attributes.deinit();
+    }
+
+    _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, mdc);
+
+    var proc_attributes: std.ArrayList([]const u8) = .empty;
+    defer proc_attributes.deinit(allocator);
+
+    var it = formula_attributes.keyIterator();
+    while (it.next()) |key| {
+        const k = key.*;
+        if (std.mem.indexOf(u8, k, ":") != null) continue;
+        if (std.mem.eql(u8, k, "MCC") or std.mem.eql(u8, k, "CC") or std.mem.eql(u8, k, "NONE")) continue;
+        try proc_attributes.append(allocator, k);
+    }
+
+    if (proc_attributes.items.len > 0) {
+        std.log.debug("ProcedureMarking: Found {d} procedure attributes to check", .{proc_attributes.items.len});
+        var one_proc_found = false;
+
+        for (data.procedure_codes.items) |*proc| {
+            if (!proc.is(.FIRST_POSITION)) continue;
+            if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
+
+            if (hasAllAttributes(proc, proc_attributes.items)) {
+                std.log.debug("ProcedureMarking: Marking first position procedure {s}", .{proc.value.toSlice()});
+                markProcedure(proc, mark_flag, impact);
+                one_proc_found = true;
+                break;
+            }
+        }
+
+        if (!one_proc_found) {
+            for (data.procedure_codes.items) |*proc| {
+                if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
+                if (hasAllAttributes(proc, proc_attributes.items)) {
+                    std.log.debug("ProcedureMarking: Marking procedure {s}", .{proc.value.toSlice()});
+                    markProcedure(proc, mark_flag, impact);
+                    one_proc_found = true;
+                    break;
+                }
+            }
+        }
+
+        if (!one_proc_found) {
+            for (data.clusters.items) |*cluster| {
+                if (hasAllAttributes(cluster, proc_attributes.items)) {
+                    std.log.debug("ProcedureMarking: Marking cluster {s}", .{cluster.value.toSlice()});
+                    var proc_values = std.StringHashMap(void).init(allocator);
+                    defer proc_values.deinit();
+
+                    for (data.procedure_codes.items) |*proc| {
+                        var in_cluster = false;
+                        for (proc.cluster_ids.items) |cid| {
+                            if (std.mem.eql(u8, cid, cluster.value.toSlice())) {
+                                in_cluster = true;
+                                break;
+                            }
+                        }
+                        if (in_cluster and !proc_values.contains(proc.value.toSlice())) {
+                            try proc_values.put(proc.value.toSlice(), {});
+                            markProcedure(proc, mark_flag, impact);
+                        }
+                    }
+                    one_proc_found = true;
+                    break;
+                }
+            }
+        }
+
+        if (!one_proc_found) {
+            attr_loop: for (proc_attributes.items) |attr_str| {
+                if (COMPLETE_SYSTEM.has(attr_str)) {
+                    var proc_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
+                    defer proc_codes_with_attr.deinit(allocator);
+
+                    for (data.procedure_codes.items) |*proc| {
+                        if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
+                        if (hasAttribute(proc, attr_str)) {
+                            try proc_codes_with_attr.append(allocator, proc);
+                        }
+                    }
+
+                    var cluster_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
+                    defer cluster_codes_with_attr.deinit(allocator);
+
+                    for (data.clusters.items) |*cluster| {
+                        if (hasAttribute(cluster, attr_str)) {
+                            try cluster_codes_with_attr.append(allocator, cluster);
+                        }
+                    }
+                    if (proc_codes_with_attr.items.len > 0 and cluster_codes_with_attr.items.len > 0) {
+                        if (data.principal_proc) |*pp| {
+                            if (hasAttribute(pp, attr_str)) {
+                                markProcedure(pp, mark_flag, impact);
+                                continue :attr_loop;
+                            }
+                        }
+                        if (proc_codes_with_attr.items.len > 0) {
+                            markProcedure(proc_codes_with_attr.items[0], mark_flag, impact);
+                            continue :attr_loop;
+                        }
+                    }
+                }
+
+                var count: usize = 0;
+                for (data.procedure_codes.items) |*proc| {
+                    if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
+                    if (hasAttribute(proc, attr_str)) {
+                        count += 1;
+                    }
+                }
+
+                if (count >= 2) {
+                    if (data.principal_proc) |*pp| {
+                        if (!pp.mdc_suppression.isSet(@intCast(mdc)) and hasAttribute(pp, attr_str)) {
+                            markProcedure(pp, mark_flag, impact);
+                            continue :attr_loop;
+                        }
+                    }
+                    for (data.procedure_codes.items) |*proc| {
+                        if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
+                        if (hasAttribute(proc, attr_str)) {
+                            markProcedure(proc, mark_flag, impact);
+                            continue :attr_loop;
+                        }
+                    }
+                    continue :attr_loop;
+                }
+
+                var match_found = false;
+                for (data.procedure_codes.items) |*proc| {
+                    if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
+                    if (hasAttribute(proc, attr_str)) {
+                        markProcedure(proc, mark_flag, impact);
+                        match_found = true;
+                        break;
+                    }
+                }
+                if (match_found) continue :attr_loop;
+
+                for (data.clusters.items) |*cluster| {
+                    if (hasAttribute(cluster, attr_str)) {
+                        var proc_values = std.StringHashMap(void).init(allocator);
+                        defer proc_values.deinit();
+
+                        for (data.procedure_codes.items) |*proc| {
+                            var in_cluster = false;
+                            for (proc.cluster_ids.items) |cid| {
+                                if (std.mem.eql(u8, cid, cluster.value.toSlice())) {
+                                    in_cluster = true;
+                                    break;
+                                }
+                            }
+                            if (in_cluster and !proc_values.contains(proc.value.toSlice())) {
+                                try proc_values.put(proc.value.toSlice(), {});
+                                markProcedure(proc, mark_flag, impact);
+                            }
+                        }
+                        continue :attr_loop;
+                    }
+                }
+            }
+        }
+    }
+
+    return mdc;
+}
+
 pub const InitialProcedureMarking = struct {
     formula_data: *const formula.FormulaData,
 
     pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
-        const data = context.data;
-        const allocator = context.allocator;
 
         std.log.debug("InitialProcedureMarking: Executing...", .{});
 
-        // Determine the winning formula
-        var winning_formula: ?formula.DrgFormula = null;
-        if (context.initial_grouping_context.pdx_match) |f| {
-            winning_formula = f;
-        } else if (context.initial_grouping_context.reroute_match) |f| {
-            winning_formula = f;
-        } else if (context.initial_grouping_context.pre_match) |f| {
-            winning_formula = f;
-        }
-
-        if (winning_formula) |drg_formula| {
-            std.log.debug("InitialProcedureMarking: Winning formula found for DRG {d}", .{drg_formula.drg});
-            // Calculate MDC
-            var mdc: i32 = drg_formula.reroute_mdc_id;
-            if (mdc == 0) {
-                if (data.principal_dx) |pdx| {
-                    if (pdx.mdc) |m| mdc = m;
-                }
-            }
-            if (isUnrelated(drg_formula.drg)) {
-                mdc = 29;
-            }
-
-            const base = self.formula_data.mapped.base_ptr();
-            const formula_str = drg_formula.getFormula(base);
-
-            const mask = &data.mask.?;
-
-            const sev_str = switch (data.initial_severity) {
-                .MCC => "MCC",
-                .CC => "CC",
-                .NONE => "NONE",
-            };
-            const sev_key = try allocator.dupe(u8, sev_str);
-            try mask.put(sev_key, 0);
-            defer {
-                _ = mask.remove(sev_key);
-                allocator.free(sev_key);
-            }
-
-            // Parse formula
-            var lexer = formula.Lexer.init(formula_str);
-            var tokens = try lexer.tokenize(allocator);
-            defer tokens.deinit(allocator);
-
-            var parser = formula.Parser.init(allocator, tokens.items);
-            const root = parser.parse() catch |err| {
-                std.debug.print("Error parsing formula: {s}\n", .{formula_str});
-                return err;
-            };
-            defer formula.Evaluator.free(root, allocator);
-
-            // Collect matched attributes
-            var formula_attributes = std.StringHashMap(void).init(allocator);
-            defer {
-                var it = formula_attributes.keyIterator();
-                while (it.next()) |key| {
-                    allocator.free(key.*);
-                }
-                formula_attributes.deinit();
-            }
-
-            _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, mdc);
-
-            // Filter attributes for Procedure Marking
-            var proc_attributes: std.ArrayList([]const u8) = .empty;
-            defer proc_attributes.deinit(allocator);
-
-            var it = formula_attributes.keyIterator();
-            while (it.next()) |key| {
-                const k = key.*;
-                if (std.mem.indexOf(u8, k, ":") != null) continue;
-                if (std.mem.eql(u8, k, "MCC") or std.mem.eql(u8, k, "CC") or std.mem.eql(u8, k, "NONE")) continue;
-                try proc_attributes.append(allocator, k);
-            }
-
-            if (proc_attributes.items.len > 0) {
-                std.log.debug("InitialProcedureMarking: Found {d} procedure attributes to check", .{proc_attributes.items.len});
-                var one_proc_found = false;
-
-                // 1. Check First Position Procedure
-                for (data.procedure_codes.items) |*proc| {
-                    if (!proc.is(.FIRST_POSITION)) continue;
-                    if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-
-                    if (hasAllAttributes(proc, proc_attributes.items)) {
-                        std.log.debug("InitialProcedureMarking: Marking first position procedure {s}", .{proc.value.toSlice()});
-                        markProcedure(proc);
-                        one_proc_found = true;
-                        break;
-                    }
-                }
-
-                // 2. Check Any Procedure
-                if (!one_proc_found) {
-                    for (data.procedure_codes.items) |*proc| {
-                        if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                        if (hasAllAttributes(proc, proc_attributes.items)) {
-                            std.log.debug("InitialProcedureMarking: Marking procedure {s}", .{proc.value.toSlice()});
-                            markProcedure(proc);
-                            one_proc_found = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 3. Check Clusters
-                if (!one_proc_found) {
-                    for (data.clusters.items) |*cluster| {
-                        if (hasAllAttributes(cluster, proc_attributes.items)) {
-                            std.log.debug("InitialProcedureMarking: Marking cluster {s}", .{cluster.value.toSlice()});
-                            // Mark all procs in cluster
-                            var proc_values = std.StringHashMap(void).init(allocator);
-                            defer proc_values.deinit();
-
-                            for (data.procedure_codes.items) |*proc| {
-                                var in_cluster = false;
-                                for (proc.cluster_ids.items) |cid| {
-                                    if (std.mem.eql(u8, cid, cluster.value.toSlice())) {
-                                        in_cluster = true;
-                                        break;
-                                    }
-                                }
-                                if (in_cluster and !proc_values.contains(proc.value.toSlice())) {
-                                    try proc_values.put(proc.value.toSlice(), {});
-                                    markProcedure(proc);
-                                }
-                            }
-                            one_proc_found = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 4. Iterate Attributes
-                if (!one_proc_found) {
-                    attr_loop: for (proc_attributes.items) |attr_str| {
-                        // Complete System Tie Breaker
-                        if (COMPLETE_SYSTEM.has(attr_str)) {
-                            var proc_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
-                            defer proc_codes_with_attr.deinit(allocator);
-
-                            for (data.procedure_codes.items) |*proc| {
-                                if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                                if (hasAttribute(proc, attr_str)) {
-                                    try proc_codes_with_attr.append(allocator, proc);
-                                }
-                            }
-
-                            var cluster_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
-                            defer cluster_codes_with_attr.deinit(allocator);
-
-                            for (data.clusters.items) |*cluster| {
-                                if (hasAttribute(cluster, attr_str)) {
-                                    try cluster_codes_with_attr.append(allocator, cluster);
-                                }
-                            }
-                            if (proc_codes_with_attr.items.len > 0 and cluster_codes_with_attr.items.len > 0) {
-                                if (data.principal_proc) |*pp| {
-                                    if (hasAttribute(pp, attr_str)) {
-                                        markProcedure(pp);
-                                        continue :attr_loop;
-                                    }
-                                }
-                                if (proc_codes_with_attr.items.len > 0) {
-                                    markProcedure(proc_codes_with_attr.items[0]);
-                                    continue :attr_loop;
-                                }
-                            }
-                        }
-
-                        // Multiple Procs Have Same Attribute
-                        var count: usize = 0;
-                        for (data.procedure_codes.items) |*proc| {
-                            if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                            if (hasAttribute(proc, attr_str)) {
-                                count += 1;
-                            }
-                        }
-
-                        if (count >= 2) {
-                            if (data.principal_proc) |*pp| {
-                                if (!pp.mdc_suppression.isSet(@intCast(mdc)) and hasAttribute(pp, attr_str)) {
-                                    markProcedure(pp);
-                                    continue :attr_loop;
-                                }
-                            }
-                            for (data.procedure_codes.items) |*proc| {
-                                if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                                if (hasAttribute(proc, attr_str)) {
-                                    markProcedure(proc);
-                                    continue :attr_loop; // Java breaks block0, which is the attribute loop
-                                }
-                            }
-                            continue :attr_loop;
-                        }
-
-                        // Single Match
-                        var match_found = false;
-                        for (data.procedure_codes.items) |*proc| {
-                            if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                            if (hasAttribute(proc, attr_str)) {
-                                markProcedure(proc);
-                                match_found = true;
-                                break;
-                            }
-                        }
-                        if (match_found) continue :attr_loop;
-
-                        // Cluster Match
-                        for (data.clusters.items) |*cluster| {
-                            if (hasAttribute(cluster, attr_str)) {
-                                var proc_values = std.StringHashMap(void).init(allocator);
-                                defer proc_values.deinit();
-
-                                for (data.procedure_codes.items) |*proc| {
-                                    var in_cluster = false;
-                                    for (proc.cluster_ids.items) |cid| {
-                                        if (std.mem.eql(u8, cid, cluster.value.toSlice())) {
-                                            in_cluster = true;
-                                            break;
-                                        }
-                                    }
-                                    if (in_cluster and !proc_values.contains(proc.value.toSlice())) {
-                                        try proc_values.put(proc.value.toSlice(), {});
-                                        markProcedure(proc);
-                                    }
-                                }
-                                continue :attr_loop;
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            std.log.debug("InitialProcedureMarking: No winning formula found.", .{});
-        }
+        _ = try markProcedureCodes(
+            context,
+            context.initial_grouping_context,
+            self.formula_data,
+            context.allocator,
+            .MARKED_FOR_INITIAL,
+            .INITIAL,
+            context.data.initial_severity,
+        );
 
         return chain.LinkResult{
             .context = context,
@@ -488,207 +564,68 @@ fn getWinningDrg(ctx: models.GroupingContext) ?i32 {
     return null;
 }
 
+fn markProcedureCodesFinalExtra(
+    context: models.ProcessingContext,
+    allocator: std.mem.Allocator,
+    calculated_mdc: i32,
+) !void {
+    const data = context.data;
+
+    const final_drg = getWinningDrg(context.final_grouping_context);
+    const initial_drg = getWinningDrg(context.initial_grouping_context);
+    const different_drgs = (final_drg != null and initial_drg != null and final_drg.? != initial_drg.?);
+
+    var all_hacs_met = std.AutoHashMap(i32, void).init(allocator);
+    defer all_hacs_met.deinit();
+
+    for (data.sdx_codes.items) |*sdx| {
+        for (sdx.hacs.items) |hac| {
+            if (hac.hac_status == .HAC_CRITERIA_MET) {
+                try all_hacs_met.put(hac.hac_number, {});
+            }
+        }
+    }
+
+    for (data.procedure_codes.items) |*proc| {
+        if (proc.hac_usage_flag.count() == 0 or !different_drgs or proc.mdc_suppression.isSet(@intCast(calculated_mdc))) continue;
+
+        var it = proc.hac_usage_flag.iterator();
+        while (it.next()) |hac_usage| {
+            const hac_num: i32 = switch (hac_usage) {
+                .HAC_08 => 8,
+                .HAC_10 => 10,
+                .HAC_11 => 11,
+                .HAC_12 => 12,
+                .HAC_13 => 13,
+                .HAC_14 => 14,
+                else => 0,
+            };
+
+            if (hac_num != 0 and all_hacs_met.contains(hac_num)) {
+                updateImpactDirection(proc, .FINAL);
+            }
+        }
+    }
+}
+
 pub const FinalDiagnosisMarking = struct {
     formula_data: *const formula.FormulaData,
 
     pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
-        const data = context.data;
-        const allocator = context.allocator;
 
-        // Determine the winning formula
-        var winning_formula: ?formula.DrgFormula = null;
-        if (context.final_grouping_context.pdx_match) |f| {
-            winning_formula = f;
-        } else if (context.final_grouping_context.reroute_match) |f| {
-            winning_formula = f;
-        } else if (context.final_grouping_context.pre_match) |f| {
-            winning_formula = f;
-        }
+        try markDiagnosisCodes(
+            context,
+            context.final_grouping_context,
+            self.formula_data,
+            context.allocator,
+            .MARKED_FOR_FINAL,
+            .FINAL,
+            context.data.final_severity,
+            context.data.final_result.mdc orelse 0,
+        );
 
-        if (winning_formula) |drg_formula| {
-            const base = self.formula_data.mapped.base_ptr();
-            const formula_str = drg_formula.getFormula(base);
-
-            const mask = &data.mask.?;
-
-            // Add severity to mask (Final Severity)
-            const sev_str = switch (data.final_severity) {
-                .MCC => "MCC",
-                .CC => "CC",
-                .NONE => "NONE",
-            };
-            const sev_key = try allocator.dupe(u8, sev_str);
-            try mask.put(sev_key, 0);
-            defer {
-                _ = mask.remove(sev_key);
-                allocator.free(sev_key);
-            }
-
-            // Parse formula
-            var lexer = formula.Lexer.init(formula_str);
-            var tokens = try lexer.tokenize(allocator);
-            defer tokens.deinit(allocator);
-
-            var parser = formula.Parser.init(allocator, tokens.items);
-            const root = parser.parse() catch |err| {
-                std.debug.print("Error parsing formula: {s}\n", .{formula_str});
-                return err;
-            };
-            defer formula.Evaluator.free(root, allocator);
-
-            // Collect matched attributes
-            var formula_attributes = std.StringHashMap(void).init(allocator);
-            defer {
-                var it = formula_attributes.keyIterator();
-                while (it.next()) |key| {
-                    allocator.free(key.*);
-                }
-                formula_attributes.deinit();
-            }
-
-            _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, data.final_result.mdc orelse 0);
-
-            // Create a mutable copy of keys to iterate and remove
-            var remaining_attributes = std.StringHashMap(void).init(allocator);
-            defer remaining_attributes.deinit();
-
-            var it = formula_attributes.keyIterator();
-            while (it.next()) |key| {
-                try remaining_attributes.put(key.*, {});
-            }
-
-            // Iterate SDX codes
-            for (data.sdx_codes.items) |*sdx| {
-                var matched_attr_key: ?[]const u8 = null;
-                var matched_attr_obj: ?models.Attribute = null;
-
-                var it_rem = remaining_attributes.keyIterator();
-                while (it_rem.next()) |key_ptr| {
-                    const attr_str = key_ptr.*;
-
-                    // Check PDX logic
-                    if (data.principal_dx) |pdx| {
-                        if (std.mem.indexOf(u8, attr_str, ":") == null) {
-                            var pdx_has = false;
-                            for (pdx.attributes.items) |a| {
-                                if (std.mem.eql(u8, a.list_name, attr_str)) {
-                                    pdx_has = true;
-                                    break;
-                                }
-                            }
-                            if (pdx_has) continue;
-                        }
-                    }
-
-                    // Check MCC/CC
-                    if (std.mem.eql(u8, attr_str, "MCC") or std.mem.eql(u8, attr_str, "CC")) {
-                        if (sdx.is(.DOWNGRADE_SEVERITY_SUPPRESSION) or sdx.is(.EXCLUDED) or sdx.is(.DEATH_EXCLUSION)) continue;
-
-                        const sdx_sev_str = switch (sdx.severity) {
-                            .MCC => "MCC",
-                            .CC => "CC",
-                            .NONE => "NONE",
-                        };
-                        if (std.mem.eql(u8, sdx_sev_str, attr_str)) {
-                            matched_attr_key = attr_str;
-                            break;
-                        }
-                    }
-
-                    // Check normal attributes
-                    var has_attr = false;
-                    var check_str = attr_str;
-                    if (std.mem.startsWith(u8, attr_str, "SDX:")) {
-                        check_str = attr_str[4..];
-                    }
-
-                    for (sdx.attributes.items) |a| {
-                        if (a.matchesString(check_str)) {
-                            has_attr = true;
-                            matched_attr_obj = a;
-                            break;
-                        }
-                    }
-                    if (!has_attr) {
-                        for (sdx.dx_cat_attributes.items) |a| {
-                            if (a.matchesString(check_str)) {
-                                has_attr = true;
-                                matched_attr_obj = a;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (has_attr) {
-                        matched_attr_key = attr_str;
-                        break;
-                    }
-                }
-
-                if (matched_attr_key) |key| {
-                    sdx.mark(.MARKED_FOR_FINAL);
-                    sdx.attribute_marked_for = matched_attr_obj;
-
-                    if (sdx.drg_impact == .INITIAL) {
-                        sdx.drg_impact = .BOTH;
-                    } else if (sdx.drg_impact == .NONE) {
-                        sdx.drg_impact = .FINAL;
-                    }
-
-                    _ = remaining_attributes.remove(key);
-                }
-            }
-        }
-
-        // Check different DRGs logic
-        const final_drg = getWinningDrg(context.final_grouping_context);
-        const initial_drg = getWinningDrg(context.initial_grouping_context);
-
-        if (final_drg != null and initial_drg != null and final_drg.? != initial_drg.?) {
-            for (data.sdx_codes.items) |*sdx| {
-                if (sdx.hacs.items.len > 0) {
-                    sdx.mark(.MARKED_FOR_FINAL);
-                    if (sdx.drg_impact == .INITIAL) {
-                        sdx.drg_impact = .BOTH;
-                    } else if (sdx.drg_impact == .NONE) {
-                        sdx.drg_impact = .FINAL;
-                    }
-                }
-            }
-        }
-
-        // FinalDiagnosisMarking specific logic
-        var return_code = models.GrouperReturnCode.OK;
-        if (data.final_result.return_code != .OK) {
-            return_code = data.final_result.return_code;
-        }
-
-        if (return_code == .OK) {
-            if (data.principal_dx) |*pdx| {
-                pdx.drg_impact = .BOTH;
-                pdx.mark(.MARKED_FOR_INITIAL);
-                pdx.mark(.MARKED_FOR_FINAL);
-            }
-        }
-
-        const hospital_status = context.runtime.poa_reporting_exempt;
-        for (data.sdx_codes.items) |*sdx| {
-            const excluded = sdx.is(.EXCLUDED);
-            const death_excluded = sdx.is(.DEATH_EXCLUSION);
-            const is_hac_val = isHac(sdx, hospital_status);
-
-            if (sdx.severity != .NONE and !excluded and !death_excluded and is_hac_val) {
-                sdx.markSeverityFlag(.FINAL);
-            } else if (excluded and !death_excluded) {
-                sdx.markSeverityFlag(.FINAL);
-            } else if (!excluded and !death_excluded and sdx.severity != .NONE) {
-                sdx.markSeverityFlag(.FINAL);
-            }
-            if ((excluded or death_excluded) and sdx.severity != .NONE) {
-                sdx.markSeverityFlag(.FINAL);
-            }
-        }
+        try markDiagnosisCodesFinalExtra(context);
 
         return chain.LinkResult{
             .context = context,
@@ -702,307 +639,18 @@ pub const FinalProcedureMarking = struct {
 
     pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !chain.LinkResult {
         const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
-        const data = context.data;
-        const allocator = context.allocator;
 
-        // 1. Base ProcedureMarking logic (adapted for Final)
+        const mdc = try markProcedureCodes(
+            context,
+            context.final_grouping_context,
+            self.formula_data,
+            context.allocator,
+            .MARKED_FOR_FINAL,
+            .FINAL,
+            context.data.final_severity,
+        );
 
-        var winning_formula: ?formula.DrgFormula = null;
-        if (context.final_grouping_context.pdx_match) |f| {
-            winning_formula = f;
-        } else if (context.final_grouping_context.reroute_match) |f| {
-            winning_formula = f;
-        } else if (context.final_grouping_context.pre_match) |f| {
-            winning_formula = f;
-        }
-
-        if (winning_formula) |drg_formula| {
-            var mdc: i32 = drg_formula.reroute_mdc_id;
-            if (mdc == 0) {
-                if (data.principal_dx) |pdx| {
-                    if (pdx.mdc) |m| mdc = m;
-                }
-            }
-            if (isUnrelated(drg_formula.drg)) {
-                mdc = 29;
-            }
-
-            const base = self.formula_data.mapped.base_ptr();
-            const formula_str = drg_formula.getFormula(base);
-
-            const mask = &data.mask.?;
-
-            const sev_str = switch (data.final_severity) {
-                .MCC => "MCC",
-                .CC => "CC",
-                .NONE => "NONE",
-            };
-            const sev_key = try allocator.dupe(u8, sev_str);
-            try mask.put(sev_key, 0);
-            defer {
-                _ = mask.remove(sev_key);
-                allocator.free(sev_key);
-            }
-
-            var lexer = formula.Lexer.init(formula_str);
-            var tokens = try lexer.tokenize(allocator);
-            defer tokens.deinit(allocator);
-
-            var parser = formula.Parser.init(allocator, tokens.items);
-            const root = parser.parse() catch |err| {
-                std.debug.print("Error parsing formula: {s}\n", .{formula_str});
-                return err;
-            };
-            defer formula.Evaluator.free(root, allocator);
-
-            var formula_attributes = std.StringHashMap(void).init(allocator);
-            defer {
-                var it = formula_attributes.keyIterator();
-                while (it.next()) |key| {
-                    allocator.free(key.*);
-                }
-                formula_attributes.deinit();
-            }
-
-            _ = try formula.Evaluator.collectMatchedAttributes(root, mask, &formula_attributes, allocator, mdc);
-
-            var proc_attributes: std.ArrayList([]const u8) = .empty;
-            defer proc_attributes.deinit(allocator);
-
-            var it = formula_attributes.keyIterator();
-            while (it.next()) |key| {
-                const k = key.*;
-                if (std.mem.indexOf(u8, k, ":") != null) continue;
-                if (std.mem.eql(u8, k, "MCC") or std.mem.eql(u8, k, "CC") or std.mem.eql(u8, k, "NONE")) continue;
-                try proc_attributes.append(allocator, k);
-            }
-
-            if (proc_attributes.items.len > 0) {
-                var one_proc_found = false;
-
-                // 1. Check First Position Procedure
-                for (data.procedure_codes.items) |*proc| {
-                    if (!proc.is(.FIRST_POSITION)) continue;
-                    if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-
-                    if (hasAllAttributes(proc, proc_attributes.items)) {
-                        proc.mark(.MARKED_FOR_FINAL);
-                        if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
-                        if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
-                        one_proc_found = true;
-                        break;
-                    }
-                }
-
-                // 2. Check Any Procedure
-                if (!one_proc_found) {
-                    for (data.procedure_codes.items) |*proc| {
-                        if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                        if (hasAllAttributes(proc, proc_attributes.items)) {
-                            proc.mark(.MARKED_FOR_FINAL);
-                            if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
-                            if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
-                            one_proc_found = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 3. Check Clusters
-                if (!one_proc_found) {
-                    for (data.clusters.items) |*cluster| {
-                        if (hasAllAttributes(cluster, proc_attributes.items)) {
-                            var proc_values = std.StringHashMap(void).init(allocator);
-                            defer proc_values.deinit();
-
-                            for (data.procedure_codes.items) |*proc| {
-                                var in_cluster = false;
-                                for (proc.cluster_ids.items) |cid| {
-                                    if (std.mem.eql(u8, cid, cluster.value.toSlice())) {
-                                        in_cluster = true;
-                                        break;
-                                    }
-                                }
-                                if (in_cluster and !proc_values.contains(proc.value.toSlice())) {
-                                    try proc_values.put(proc.value.toSlice(), {});
-                                    proc.mark(.MARKED_FOR_FINAL);
-                                    if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
-                                    if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
-                                }
-                            }
-                            one_proc_found = true;
-                            break;
-                        }
-                    }
-                }
-
-                // 4. Iterate Attributes
-                if (!one_proc_found) {
-                    attr_loop: for (proc_attributes.items) |attr_str| {
-                        if (COMPLETE_SYSTEM.has(attr_str)) {
-                            var proc_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
-                            defer proc_codes_with_attr.deinit(allocator);
-
-                            for (data.procedure_codes.items) |*proc| {
-                                if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                                if (hasAttribute(proc, attr_str)) {
-                                    try proc_codes_with_attr.append(allocator, proc);
-                                }
-                            }
-
-                            var cluster_codes_with_attr: std.ArrayList(*models.ProcedureCode) = .empty;
-                            defer cluster_codes_with_attr.deinit(allocator);
-
-                            for (data.clusters.items) |*cluster| {
-                                if (hasAttribute(cluster, attr_str)) {
-                                    try cluster_codes_with_attr.append(allocator, cluster);
-                                }
-                            }
-                            if (proc_codes_with_attr.items.len > 0 and cluster_codes_with_attr.items.len > 0) {
-                                if (data.principal_proc) |*pp| {
-                                    if (hasAttribute(pp, attr_str)) {
-                                        pp.mark(.MARKED_FOR_FINAL);
-                                        if (pp.drg_impact == .INITIAL) pp.drg_impact = .BOTH;
-                                        if (pp.drg_impact == .NONE) pp.drg_impact = .FINAL;
-                                        continue :attr_loop;
-                                    }
-                                }
-                                if (proc_codes_with_attr.items.len > 0) {
-                                    const p = proc_codes_with_attr.items[0];
-                                    p.mark(.MARKED_FOR_FINAL);
-                                    if (p.drg_impact == .INITIAL) p.drg_impact = .BOTH;
-                                    if (p.drg_impact == .NONE) p.drg_impact = .FINAL;
-                                    continue :attr_loop;
-                                }
-                            }
-                        }
-
-                        var count: usize = 0;
-                        for (data.procedure_codes.items) |*proc| {
-                            if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                            if (hasAttribute(proc, attr_str)) {
-                                count += 1;
-                            }
-                        }
-
-                        if (count >= 2) {
-                            if (data.principal_proc) |*pp| {
-                                if (!pp.mdc_suppression.isSet(@intCast(mdc)) and hasAttribute(pp, attr_str)) {
-                                    pp.mark(.MARKED_FOR_FINAL);
-                                    if (pp.drg_impact == .INITIAL) pp.drg_impact = .BOTH;
-                                    if (pp.drg_impact == .NONE) pp.drg_impact = .FINAL;
-                                    continue :attr_loop;
-                                }
-                            }
-                            for (data.procedure_codes.items) |*proc| {
-                                if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                                if (hasAttribute(proc, attr_str)) {
-                                    proc.mark(.MARKED_FOR_FINAL);
-                                    if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
-                                    if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
-                                    continue :attr_loop;
-                                }
-                            }
-                            continue :attr_loop;
-                        }
-
-                        var match_found = false;
-                        for (data.procedure_codes.items) |*proc| {
-                            if (proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-                            if (hasAttribute(proc, attr_str)) {
-                                proc.mark(.MARKED_FOR_FINAL);
-                                if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
-                                if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
-                                match_found = true;
-                                break;
-                            }
-                        }
-                        if (match_found) continue :attr_loop;
-
-                        for (data.clusters.items) |*cluster| {
-                            if (hasAttribute(cluster, attr_str)) {
-                                var proc_values = std.StringHashMap(void).init(allocator);
-                                defer proc_values.deinit();
-
-                                for (data.procedure_codes.items) |*proc| {
-                                    var in_cluster = false;
-                                    for (proc.cluster_ids.items) |cid| {
-                                        if (std.mem.eql(u8, cid, cluster.value.toSlice())) {
-                                            in_cluster = true;
-                                            break;
-                                        }
-                                    }
-                                    if (in_cluster and !proc_values.contains(proc.value.toSlice())) {
-                                        try proc_values.put(proc.value.toSlice(), {});
-                                        proc.mark(.MARKED_FOR_FINAL);
-                                        if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
-                                        if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
-                                    }
-                                }
-                                continue :attr_loop;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // 2. HAC Marking Logic
-        // Calculate MDC again (or reuse)
-        var mdc: i32 = 0;
-        if (context.final_grouping_context.reroute_match) |f| {
-            mdc = f.reroute_mdc_id;
-        }
-        if (mdc == 0) {
-            if (data.principal_dx) |pdx| {
-                if (pdx.mdc) |m| mdc = m;
-            }
-        }
-        if (context.final_grouping_context.pdx_match) |f| {
-            if (isUnrelated(f.drg)) mdc = 29;
-        } else if (context.final_grouping_context.reroute_match) |f| {
-            if (isUnrelated(f.drg)) mdc = 29;
-        } else if (context.final_grouping_context.pre_match) |f| {
-            if (isUnrelated(f.drg)) mdc = 29;
-        }
-
-        const final_drg = getWinningDrg(context.final_grouping_context);
-        const initial_drg = getWinningDrg(context.initial_grouping_context);
-        const different_drgs = (final_drg != null and initial_drg != null and final_drg.? != initial_drg.?);
-
-        // Collect all HACs met
-        var all_hacs_met = std.AutoHashMap(i32, void).init(allocator);
-        defer all_hacs_met.deinit();
-
-        for (data.sdx_codes.items) |*sdx| {
-            for (sdx.hacs.items) |hac| {
-                if (hac.hac_status == .HAC_CRITERIA_MET) {
-                    try all_hacs_met.put(hac.hac_number, {});
-                }
-            }
-        }
-
-        for (data.procedure_codes.items) |*proc| {
-            if (proc.hac_usage_flag.count() == 0 or !different_drgs or proc.mdc_suppression.isSet(@intCast(mdc))) continue;
-
-            var it = proc.hac_usage_flag.iterator();
-            while (it.next()) |hac_usage| {
-                const hac_num: i32 = switch (hac_usage) {
-                    .HAC_08 => 8,
-                    .HAC_10 => 10,
-                    .HAC_11 => 11,
-                    .HAC_12 => 12,
-                    .HAC_13 => 13,
-                    .HAC_14 => 14,
-                    else => 0,
-                };
-
-                if (hac_num != 0 and all_hacs_met.contains(hac_num)) {
-                    if (proc.drg_impact == .INITIAL) proc.drg_impact = .BOTH;
-                    if (proc.drg_impact == .NONE) proc.drg_impact = .FINAL;
-                }
-            }
-        }
+        try markProcedureCodesFinalExtra(context, context.allocator, mdc);
 
         return chain.LinkResult{
             .context = context,
