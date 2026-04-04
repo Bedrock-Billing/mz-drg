@@ -24,6 +24,14 @@ pub const InputClaim = struct {
     tie_breaker: ?[]const u8 = null, // "CLINICAL_SIGNIFICANCE", "ALPHABETICAL"
 };
 
+pub const GrouperFlagsOutput = struct {
+    admit_dx_grouper_flag: []const u8,
+    initial_drg_secondary_dx_cc_mcc: []const u8,
+    final_drg_secondary_dx_cc_mcc: []const u8,
+    num_hac_categories_satisfied: i32,
+    hac_status_value: []const u8,
+};
+
 pub const OutputResult = struct {
     initial_drg: ?i32,
     initial_mdc: ?i32,
@@ -42,6 +50,7 @@ pub const OutputResult = struct {
     pdx_output: ?DiagnosisOutput = null,
     sdx_output: []const DiagnosisOutput = &.{},
     proc_output: []const ProcedureOutput = &.{},
+    grouper_flags: ?GrouperFlagsOutput = null,
 };
 
 pub const HacOutput = struct {
@@ -213,6 +222,19 @@ pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdr
     if (final_ctx.data.principal_dx) |pdx| {
         pdx_out = try mapDiagnosisOutput(arena, pdx);
     }
+    // Calculate grouper flags
+    const grouper_flags = models.calculateGrouperFlags(
+        final_ctx.data,
+        final_ctx.runtime.poa_reporting_exempt,
+        root_allocator,
+    );
+    const grouper_flags_out = GrouperFlagsOutput{
+        .admit_dx_grouper_flag = @tagName(grouper_flags.admit_dx_grouper_flag),
+        .initial_drg_secondary_dx_cc_mcc = @tagName(grouper_flags.initial_drg_secondary_dx_cc_mcc),
+        .final_drg_secondary_dx_cc_mcc = @tagName(grouper_flags.final_drg_secondary_dx_cc_mcc),
+        .num_hac_categories_satisfied = grouper_flags.num_hac_categories_satisfied,
+        .hac_status_value = @tagName(grouper_flags.hac_status_value),
+    };
 
     const output = OutputResult{
         .initial_drg = final_ctx.data.initial_result.drg,
@@ -232,6 +254,7 @@ pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdr
         .pdx_output = pdx_out,
         .sdx_output = sdx_out.items,
         .proc_output = proc_out.items,
+        .grouper_flags = grouper_flags_out,
     };
 
     // 6. Stringify (arena for the writer buffer, then copy to root_allocator)

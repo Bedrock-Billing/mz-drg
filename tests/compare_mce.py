@@ -61,13 +61,11 @@ def init_jvm():
 def run_java_mce(claim, icd_version=10):
     """Run a claim through the Java CMS MCE and return edit info."""
     gov = jpype.JPackage("gov")
-    com = jpype.JPackage("com")
 
     MceComponent = gov.cms.editor.mce.MceComponent
     MceRecord = gov.cms.editor.mce.transfer.MceRecord
     MceDiagnosisCode = gov.cms.editor.mce.model.MceDiagnosisCode
     MceProcedureCode = gov.cms.editor.mce.model.MceProcedureCode
-    GfcPoa = com.mmm.his.cer.foundation.model.GfcPoa
     Integer = jpype.JClass("java.lang.Integer")
 
     # Build MceRecord
@@ -340,8 +338,6 @@ def benchmark_zig(claims, icd_version=10):
 def benchmark_java(claims, icd_version=10):
     """Benchmark the Java CMS MCE editor."""
     gov = jpype.JPackage("gov")
-    com = jpype.JPackage("com")
-
     MceComponent = gov.cms.editor.mce.MceComponent
     MceRecord = gov.cms.editor.mce.transfer.MceRecord
     MceDiagnosisCode = gov.cms.editor.mce.model.MceDiagnosisCode
@@ -435,9 +431,7 @@ def main():
         with open(args.file) as f:
             claims = json.load(f)
     else:
-        # Generate simple test claims
-        claims = generate_test_claims(args.count)
-        print(f"Generated {len(claims)} test claims")
+        raise ValueError("Please provide a path to a JSON claims file")
 
     if args.benchmark:
         print(f"Benchmarking with {len(claims)} claims...")

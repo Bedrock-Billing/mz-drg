@@ -193,7 +193,6 @@ def compile_discharge_status(root, termination: str) -> bytes:
     entries.sort(key=lambda e: e.code)
 
     header_size = 32
-    entry_size = 12
     entries_offset = header_size
 
     entry_data = bytearray()

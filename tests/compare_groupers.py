@@ -1,6 +1,5 @@
 import jpype
 import jpype.imports
-from jpype.types import *
 import os
 import sys
 import glob

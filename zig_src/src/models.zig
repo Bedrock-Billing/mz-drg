@@ -178,6 +178,27 @@ pub const AttributePrefix = enum {
     ONLY,
 };
 
+pub const AdmitDxGrouperFlag = enum {
+    DX_INVALID,
+    DX_VALID,
+    DX_NOT_GIVEN,
+};
+
+pub const HacStatus = enum {
+    NOT_APPLICABLE,
+    FINAL_DRG_NO_CHANGE,
+    FINAL_DRG_CHANGES,
+    FINAL_DRG_UNGROUPABLE,
+};
+
+pub const GrouperFlags = struct {
+    admit_dx_grouper_flag: AdmitDxGrouperFlag = .DX_NOT_GIVEN,
+    initial_drg_secondary_dx_cc_mcc: Severity = .NONE,
+    final_drg_secondary_dx_cc_mcc: Severity = .NONE,
+    num_hac_categories_satisfied: i32 = 0,
+    hac_status_value: HacStatus = .NOT_APPLICABLE,
+};
+
 pub const SourceLogicLists = struct {
     pub const INVALID_PDX = "INVALID_PDX";
     pub const PDX_ECODE = "PDX_ECODE";
@@ -502,6 +523,85 @@ pub const ProcessingContext = struct {
         self.final_mdc.deinit(self.allocator);
     }
 };
+
+pub fn calculateGrouperFlags(
+    data: *const ProcessingData,
+    hospital_status: HospitalStatusOptionFlag,
+    allocator: std.mem.Allocator,
+) GrouperFlags {
+    var flags = GrouperFlags{};
+
+    // 1. Validate admit DX
+    if (data.admit_dx) |admit| {
+        const admit_value = admit.value.toSlice();
+        if (admit_value.len > 0 and !std.mem.eql(u8, admit_value, "NULL")) {
+            if (admit.is(.VALID)) {
+                flags.admit_dx_grouper_flag = .DX_VALID;
+            } else {
+                flags.admit_dx_grouper_flag = .DX_INVALID;
+            }
+        } else {
+            flags.admit_dx_grouper_flag = .DX_NOT_GIVEN;
+        }
+    } else {
+        flags.admit_dx_grouper_flag = .DX_NOT_GIVEN;
+    }
+
+    // 2. Get DRG severity - use the already-computed severity values
+    flags.initial_drg_secondary_dx_cc_mcc = data.initial_severity;
+    flags.final_drg_secondary_dx_cc_mcc = data.final_severity;
+
+    // 3. Count HAC categories satisfied (unique HAC numbers with HAC_CRITERIA_MET)
+    flags.num_hac_categories_satisfied = countHacCategoriesSatisfied(data, allocator);
+
+    // 4. Calculate HAC status value
+    flags.hac_status_value = calculateHacStatusValue(
+        data.initial_result.drg orelse 0,
+        data.final_result.drg orelse 0,
+        hospital_status,
+        flags.num_hac_categories_satisfied,
+    );
+
+    return flags;
+}
+
+fn countHacCategoriesSatisfied(data: *const ProcessingData, allocator: std.mem.Allocator) i32 {
+    var hac_set = std.AutoHashMap(i32, void).init(allocator);
+    defer hac_set.deinit();
+
+    for (data.sdx_codes.items) |dx| {
+        for (dx.hacs_flags.items) |hac| {
+            if (hac.hac_status == .HAC_CRITERIA_MET) {
+                hac_set.put(hac.hac_number, {}) catch {};
+            }
+        }
+    }
+
+    return @as(i32, @intCast(hac_set.count()));
+}
+
+fn calculateHacStatusValue(
+    initial_drg: i32,
+    final_drg: i32,
+    hospital_status: HospitalStatusOptionFlag,
+    num_hac_categories: i32,
+) HacStatus {
+    if (hospital_status == .EXEMPT) {
+        return .NOT_APPLICABLE;
+    }
+
+    if (num_hac_categories >= 1) {
+        if (initial_drg == final_drg) {
+            return .FINAL_DRG_NO_CHANGE;
+        } else if (final_drg == 999) {
+            return .FINAL_DRG_UNGROUPABLE;
+        } else {
+            return .FINAL_DRG_CHANGES;
+        }
+    }
+
+    return .NOT_APPLICABLE;
+}
 
 test "models basic usage" {
     const allocator = std.testing.allocator;

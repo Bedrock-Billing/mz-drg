@@ -190,6 +190,7 @@ fn intToDischargeStatus(v: i32) models.DischargeStatus {
 const ResultWrapper = struct {
     context: models.ProcessingContext,
     arena: std.heap.ArenaAllocator,
+    grouper_flags: models.GrouperFlags,
 };
 
 export fn msdrg_group(ver: *MsdrgVersion, input: *MsdrgInput) ?*MsdrgResult {
@@ -203,9 +204,16 @@ export fn msdrg_group(ver: *MsdrgVersion, input: *MsdrgInput) ?*MsdrgResult {
 
     const result = link.execute(context) catch return null;
 
+    const grouper_flags = models.calculateGrouperFlags(
+        result.context.data,
+        input_wrapper.hospital_status,
+        allocator,
+    );
+
     const res_wrapper = allocator.create(ResultWrapper) catch return null;
     res_wrapper.context = result.context;
     res_wrapper.arena = std.heap.ArenaAllocator.init(allocator);
+    res_wrapper.grouper_flags = grouper_flags;
 
     return @ptrCast(res_wrapper);
 }
@@ -444,6 +452,53 @@ export fn msdrg_result_get_proc_flags(res: *MsdrgResult, index: i32) [*c]const u
     const idx = @as(usize, @intCast(index));
     if (idx >= wrapper.context.data.procedure_codes.items.len) return "";
     return formatFlags(wrapper.arena.allocator(), wrapper.context.data.procedure_codes.items[idx]);
+}
+
+// --- Grouper Flags ---
+
+export fn msdrg_result_get_admit_dx_grouper_flag(res: *MsdrgResult) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @intFromEnum(wrapper.grouper_flags.admit_dx_grouper_flag);
+}
+
+export fn msdrg_result_get_admit_dx_grouper_flag_name(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @tagName(wrapper.grouper_flags.admit_dx_grouper_flag);
+}
+
+export fn msdrg_result_get_initial_severity(res: *MsdrgResult) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @intFromEnum(wrapper.grouper_flags.initial_drg_secondary_dx_cc_mcc);
+}
+
+export fn msdrg_result_get_initial_severity_name(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @tagName(wrapper.grouper_flags.initial_drg_secondary_dx_cc_mcc);
+}
+
+export fn msdrg_result_get_final_severity(res: *MsdrgResult) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @intFromEnum(wrapper.grouper_flags.final_drg_secondary_dx_cc_mcc);
+}
+
+export fn msdrg_result_get_final_severity_name(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @tagName(wrapper.grouper_flags.final_drg_secondary_dx_cc_mcc);
+}
+
+export fn msdrg_result_get_num_hac_categories_satisfied(res: *MsdrgResult) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return wrapper.grouper_flags.num_hac_categories_satisfied;
+}
+
+export fn msdrg_result_get_hac_status_value(res: *MsdrgResult) i32 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @intFromEnum(wrapper.grouper_flags.hac_status_value);
+}
+
+export fn msdrg_result_get_hac_status_value_name(res: *MsdrgResult) [*c]const u8 {
+    const wrapper = @as(*ResultWrapper, @ptrCast(@alignCast(res)));
+    return @tagName(wrapper.grouper_flags.hac_status_value);
 }
 
 // --- Hospital Status ---

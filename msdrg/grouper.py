@@ -85,6 +85,35 @@ class ProcedureOutput(TypedDict, total=False):
     flags: list[str]
 
 
+class AdmitDxGrouperFlag(TypedDict, total=False):
+    DX_INVALID = "DX_INVALID"
+    DX_VALID = "DX_VALID"
+    DX_NOT_GIVEN = "DX_NOT_GIVEN"
+
+
+class HacStatus(TypedDict, total=False):
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    FINAL_DRG_NO_CHANGE = "FINAL_DRG_NO_CHANGE"
+    FINAL_DRG_CHANGES = "FINAL_DRG_CHANGES"
+    FINAL_DRG_UNGROUPABLE = "FINAL_DRG_UNGROUPABLE"
+
+
+class Severity(TypedDict, total=False):
+    NONE = "NONE"
+    CC = "CC"
+    MCC = "MCC"
+
+
+class GrouperFlagsOutput(TypedDict, total=False):
+    """Grouper flags for a claim."""
+
+    admit_dx_grouper_flag: AdmitDxGrouperFlag
+    initial_drg_secondary_dx_cc_mcc: Severity
+    final_drg_secondary_dx_cc_mcc: Severity
+    num_hac_categories_satisfied: int
+    hac_status_value: HacStatus
+
+
 class GroupResult(TypedDict, total=False):
     """
     Result from ``MsdrgGrouper.group()``.
@@ -109,6 +138,7 @@ class GroupResult(TypedDict, total=False):
     pdx_output: DiagnosisOutput | None
     sdx_output: list[DiagnosisOutput]
     proc_output: list[ProcedureOutput]
+    grouper_flags: GrouperFlagsOutput
 
 
 # ---------------------------------------------------------------------------

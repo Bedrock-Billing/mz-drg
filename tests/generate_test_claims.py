@@ -683,7 +683,7 @@ def generate_claims(count: int, output_file: str):
     )
     print(f"  {len(GROUPERS)} grouper versions")
     print(f"  {len(VALID_DISCHARGE_STATUSES)} discharge status codes")
-    print(f"  3 hospital statuses (EXEMPT, NOT_EXEMPT, UNKNOWN)")
+    print("  3 hospital statuses (EXEMPT, NOT_EXEMPT, UNKNOWN)")
 
     with open(output_file, "w") as f:
         json.dump(all_claims, f, indent=2)

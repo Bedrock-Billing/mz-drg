@@ -4,6 +4,31 @@ All notable changes to this project are documented here. This project adheres to
 
 ---
 
+## v0.1.9 — 2026-04-03
+
+### Added
+
+- :sparkles: **GrouperFlags in JSON output** — `MsdrgGrouperFlags` now computed and included in JSON response:
+  - `admit_dx_grouper_flag` — DX_VALID / DX_INVALID / DX_NOT_GIVEN
+  - `initial_drg_secondary_dx_cc_mcc` / `final_drg_secondary_dx_cc_mcc` — NONE / CC / MCC
+  - `num_hac_categories_satisfied` — count of unique HAC categories with HAC_CRITERIA_MET
+  - `hac_status_value` — NOT_APPLICABLE / FINAL_DRG_NO_CHANGE / FINAL_DRG_CHANGES / FINAL_DRG_UNGROUPABLE
+
+- :sparkles: **GrouperFlags C API** — 9 new result getters for structured callers:
+  - `msdrg_result_get_admit_dx_grouper_flag()` / `_name()`
+  - `msdrg_result_get_initial_severity()` / `_name()`
+  - `msdrg_result_get_final_severity()` / `_name()`
+  - `msdrg_result_get_num_hac_categories_satisfied()`
+  - `msdrg_result_get_hac_status_value()` / `_name()`
+
+- **HAC test scenarios** — 5 new test cases in `test_hac_scenarios.py` validating T80211A (HAC 7) and T8141XA (HAC 11/12/13) triggers with POA=Y/N and EXEMPT hospital status
+
+### Refactored
+
+- **Marking.zig deduplication** — consolidated ~1,300 lines of duplicated marking logic into ~938 lines (~31% reduction) via shared helper functions: `getWinningFormula`, `updateImpactDirection`, `markDiagnosisCodes`, `markProcedureCodes`, and Final-specific variants
+
+---
+
 ## v0.1.8 — 2026-04-02
 
 ### Added

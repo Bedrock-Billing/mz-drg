@@ -13,7 +13,6 @@ Usage:
 import json
 import time
 import argparse
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from msdrg import MsdrgGrouper
