@@ -91,6 +91,9 @@ nav:
     - Input Format: mce/input.md
     - Output Format: mce/output.md
     - Edit Types: mce/edits.md
+  - ICD-10 Converter:
+    - Overview: converter/overview.md
+    - Usage: converter/usage.md
   - Developer Guide:
     - Building from Source: dev/building.md
     - C API: dev/c-api.md

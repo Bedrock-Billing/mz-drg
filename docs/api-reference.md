@@ -107,6 +107,7 @@ class ClaimInput(TypedDict, total=False):
     discharge_status: int                                 # CMS discharge status code
     hospital_status: Literal["EXEMPT", "NOT_EXEMPT", "UNKNOWN"]
     tie_breaker: Literal["CLINICAL_SIGNIFICANCE", "ALPHABETICAL"]
+    source_icd_version: int                               # Source ICD-10 fiscal year for conversion
     pdx: DiagnosisInput                                   # Principal diagnosis (required)
     admit_dx: DiagnosisInput                              # Admission diagnosis
     sdx: list[DiagnosisInput]                             # Secondary diagnoses
@@ -148,6 +149,19 @@ class GroupResult(TypedDict, total=False):
     pdx_output: DiagnosisOutput | None
     sdx_output: list[DiagnosisOutput]
     proc_output: list[ProcedureOutput]
+    conversions: list[CodeConversion]       # ICD version conversions (empty if none)
+```
+
+#### `CodeConversion`
+
+Returned in `GroupResult.conversions` when `source_icd_version` triggers code mapping:
+
+```python
+class CodeConversion(TypedDict):
+    original: str           # The input code
+    converted: str          # The mapped code
+    code_type: str          # "dx" or "pr"
+    field: str              # "pdx", "admit_dx", "sdx[0]", "procedures[1]", etc.
 ```
 
 #### `DiagnosisOutput`
@@ -310,9 +324,97 @@ class MceEditDetail(TypedDict):
 
 ---
 
+## ICD-10 Converter
+
+### `IcdConverter`
+
+Maps ICD-10-CM/PCS codes between fiscal year versions using CMS conversion tables.
+
+```python
+class IcdConverter(lib_path=None, data_dir=None)
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `lib_path` | `str \| None` | `None` | Path to the shared library. Auto-detected if not provided. |
+| `data_dir` | `str \| None` | `None` | Path to the data directory. Auto-detected if not provided. |
+
+**Methods:**
+
+#### `convert_dx(code, source_year, target_year)`
+
+Convert a single ICD-10-CM diagnosis code. Returns the original if no mapping exists.
+
+```python
+def convert_dx(self, code: str, source_year: int, target_year: int) -> str
+```
+
+#### `convert_pr(code, source_year, target_year)`
+
+Convert a single ICD-10-PCS procedure code. Returns the original if no mapping exists.
+
+```python
+def convert_pr(self, code: str, source_year: int, target_year: int) -> str
+```
+
+#### `convert_dx_batch(codes, source_year, target_year)`
+
+Convert a batch of diagnosis codes.
+
+```python
+def convert_dx_batch(
+    self, codes: list[str], source_year: int, target_year: int
+) -> list[ConversionResult]
+```
+
+#### `convert_pr_batch(codes, source_year, target_year)`
+
+Convert a batch of procedure codes.
+
+```python
+def convert_pr_batch(
+    self, codes: list[str], source_year: int, target_year: int
+) -> list[ConversionResult]
+```
+
+#### `version_to_year(version)` / `year_to_version(year)`
+
+Static methods to convert between MS-DRG version numbers and ICD-10 fiscal years.
+
+```python
+@staticmethod
+def version_to_year(version: int) -> int   # 431 -> 2026
+
+@staticmethod
+def year_to_version(year: int) -> int      # 2026 -> 431
+```
+
+#### `close()` / Context manager
+
+```python
+with IcdConverter() as conv:
+    result = conv.convert_dx("B880", source_year=2025, target_year=2026)
+```
+
+---
+
+### Output Types
+
+#### `ConversionResult`
+
+```python
+class ConversionResult(TypedDict):
+    original: str       # Input code
+    converted: str      # Mapped code (same as original if no mapping)
+```
+
+---
+
 ## Thread Safety
 
-Both `MsdrgGrouper` and `MceEditor` contexts are **immutable after initialization** and safe to share across threads. Each call to `group()` and `edit()` is independently thread-safe.
+`MsdrgGrouper`, `MceEditor`, and `IcdConverter` contexts are all **immutable after initialization** and safe to share across threads. Each call to `group()`, `edit()`, and `convert_dx()`/`convert_pr()` is independently thread-safe.
 
 !!! tip "Best Practice"
     Create one instance and reuse it. Initialization loads binary data via memory mapping — subsequent calls are fast and lock-free.

@@ -96,6 +96,7 @@ const InputWrapper = struct {
     data: models.ProcessingData,
     hospital_status: models.HospitalStatusOptionFlag = .NOT_EXEMPT,
     tie_breaker: models.MarkingLogicTieBreaker = .CLINICAL_SIGNIFICANCE,
+    source_icd_year: u32 = 0, // 0 = no conversion
 };
 
 export fn msdrg_input_create() ?*MsdrgInput {
@@ -561,6 +562,33 @@ export fn msdrg_group_json(ctx: *MsdrgContext, json_str: [*c]const u8) [*c]const
     @memcpy(terminated, result_json);
 
     return terminated.ptr;
+}
+
+// --- ICD-10 Code Conversion ---
+
+export fn msdrg_input_set_source_icd_year(input: *MsdrgInput, year: u32) void {
+    const wrapper = @as(*InputWrapper, @ptrCast(@alignCast(input)));
+    wrapper.source_icd_year = year;
+}
+
+export fn msdrg_convert_dx(ctx: *MsdrgContext, code: [*c]const u8, source_year: u32, target_year: u32) [*c]const u8 {
+    if (code == null) return null;
+    const chain_ptr = @as(*msdrg.GrouperChain, @ptrCast(@alignCast(ctx)));
+    const code_slice = std.mem.span(code);
+
+    const converted = chain_ptr.convertDxCode(code_slice, source_year, target_year, allocator) catch return null;
+    if (converted) |c| return c.ptr;
+    return null;
+}
+
+export fn msdrg_convert_pr(ctx: *MsdrgContext, code: [*c]const u8, source_year: u32, target_year: u32) [*c]const u8 {
+    if (code == null) return null;
+    const chain_ptr = @as(*msdrg.GrouperChain, @ptrCast(@alignCast(ctx)));
+    const code_slice = std.mem.span(code);
+
+    const converted = chain_ptr.convertPrCode(code_slice, source_year, target_year, allocator) catch return null;
+    if (converted) |c| return c.ptr;
+    return null;
 }
 
 // --- Tests ---

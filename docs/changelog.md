@@ -4,9 +4,48 @@ All notable changes to this project are documented here. This project adheres to
 
 ---
 
-## v0.1.9 — 2026-04-03
+## v0.1.10 — 2026-04-06
 
 ### Added
+
+- :sparkles: **ICD-10 Code Conversion** — map diagnosis and procedure codes between ICD-10 fiscal year versions using CMS conversion tables. Supports forward mapping (newer→older) and backward mapping (older→newer).
+
+  **Standalone converter:**
+  ```python
+  with msdrg.IcdConverter() as conv:
+      # Convert a single DX code from FY2025 to FY2026
+      new_code = conv.convert_dx("A000", source_year=2025, target_year=2026)
+      # Convert a procedure code backwards
+      old_code = conv.convert_pr("02703DZ", source_year=2026, target_year=2025)
+      # Batch convert
+      results = conv.convert_dx_batch(["I5020", "E1165"], source_year=2025, target_year=2026)
+  ```
+
+  **Grouper integration** — set `source_icd_version` on a claim to auto-convert codes before grouping:
+  ```python
+  with msdrg.MsdrgGrouper() as g:
+      result = g.group({
+          "version": 431,             # Target: FY2026
+          "source_icd_version": 2025,  # Source: FY2025 codes
+          "pdx": {"code": "I5020"},
+          ...
+      })
+  ```
+
+- **`scripts/compile_icd_conversions.py`** — downloads CMS ICD-10-CM and ICD-10-PCS conversion tables for adjacent year pairs and compiles them into a single binary file per code type (`icd10cm_conversions.bin`, `icd10pcs_conversions.bin`).
+
+- **`zig_src/src/conversion.zig`** — binary data loading with memory-mapped I/O and binary search lookup for code conversion pairs.
+
+- **C API functions:**
+  - `msdrg_convert_dx(ctx, code, source_year, target_year)` — convert a single diagnosis code
+  - `msdrg_convert_pr(ctx, code, source_year, target_year)` — convert a single procedure code
+  - `msdrg_input_set_source_icd_year(input, year)` — set source ICD year for auto-conversion
+
+- **`IcdConverter` Python class** — standalone code conversion with `convert_dx()`, `convert_pr()`, `convert_dx_batch()`, `convert_pr_batch()` methods and `version_to_year()` / `year_to_version()` helpers.
+
+- **18 new tests** in `test_icd_conversions.py` covering lifecycle, version/year helpers, conversion behavior without data, and grouper integration.
+
+## v0.1.9 — 2026-04-06
 
 - :sparkles: **GrouperFlags in JSON output** — `MsdrgGrouperFlags` now computed and included in JSON response:
   - `admit_dx_grouper_flag` — DX_VALID / DX_INVALID / DX_NOT_GIVEN

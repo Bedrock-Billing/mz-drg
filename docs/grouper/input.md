@@ -9,6 +9,7 @@ The `group()` method accepts a dictionary with the following fields:
     "sex": 0,
     "discharge_status": 1,
     "hospital_status": "NOT_EXEMPT",
+    "source_icd_version": 2025,
     "pdx": {"code": "I5020", "poa": "Y"},
     "admit_dx": {"code": "R0602"},
     "sdx": [
@@ -29,6 +30,7 @@ The `group()` method accepts a dictionary with the following fields:
 | `discharge_status` | int | Yes | CMS discharge status code (see below) |
 | `hospital_status` | str | No | `"NOT_EXEMPT"` (default), `"EXEMPT"`, or `"UNKNOWN"`. See [Hospital Status](hospital-status.md). |
 | `tie_breaker` | str | No | `"CLINICAL_SIGNIFICANCE"` (default) or `"ALPHABETICAL"`. See [Tie Breaker](#tie-breaker). |
+| `source_icd_version` | int | No | Source ICD-10 fiscal year (e.g. `2025`) for automatic code conversion. See [ICD Converter](../converter/overview.md). |
 | `pdx` | dict | Yes | Principal diagnosis |
 | `admit_dx` | dict | No | Admission diagnosis |
 | `sdx` | list | No | Secondary diagnoses (defaults to `[]`) |

@@ -22,7 +22,8 @@
         "flags": ["VALID", "MARKED_FOR_INITIAL", "MARKED_FOR_FINAL"]
     },
     "sdx_output": [...],
-    "proc_output": [...]
+    "proc_output": [...],
+    "conversions": []  # or [{"original": "B880", "converted": "B8801", ...}]
 }
 ```
 
@@ -42,6 +43,7 @@
 | `pdx_output` | dict \| null | Detailed output for principal diagnosis |
 | `sdx_output` | list | Detailed output for each secondary diagnosis |
 | `proc_output` | list | Detailed output for each procedure |
+| `conversions` | list | ICD version conversions applied (empty if `source_icd_version` not set). See [ICD Converter](../converter/usage.md#grouper-integration). |
 
 ## Diagnosis output
 

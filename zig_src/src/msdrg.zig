@@ -13,6 +13,7 @@ const diagnosis = @import("diagnosis.zig");
 const description = @import("description.zig");
 const gender = @import("gender.zig");
 const formula = @import("formula.zig");
+const conversion = @import("conversion.zig");
 
 /// Chain link that builds the attribute mask once after preprocessing.
 /// Stored on ProcessingData for reuse by grouping, marking, and HAC.
@@ -44,6 +45,10 @@ pub const GrouperChain = struct {
     hac_descriptions: hac.HacDescriptionData,
     hac_formula_data: hac.HacFormulaData,
     formula_data: formula.FormulaData,
+
+    // ICD-10 conversion tables (optional, loaded if files exist)
+    cm_conversions: ?conversion.ConversionData = null,
+    pcs_conversions: ?conversion.ConversionData = null,
 
     allocator: std.mem.Allocator,
 
@@ -121,6 +126,15 @@ pub const GrouperChain = struct {
         defer allocator.free(formula_path);
         const formula_data = try formula.FormulaData.init(formula_path);
 
+        // ICD-10 conversion tables (optional)
+        const cm_conv_path = try join(allocator, &[_][]const u8{ data_dir, "icd10cm_conversions.bin" });
+        defer allocator.free(cm_conv_path);
+        const cm_conversions = conversion.ConversionData.init(cm_conv_path, 0x49434443) catch null;
+
+        const pcs_conv_path = try join(allocator, &[_][]const u8{ data_dir, "icd10pcs_conversions.bin" });
+        defer allocator.free(pcs_conv_path);
+        const pcs_conversions = conversion.ConversionData.init(pcs_conv_path, 0x49434450) catch null;
+
         const self = GrouperChain{
             .cluster_info = cluster_info,
             .cluster_map = cluster_map,
@@ -136,6 +150,8 @@ pub const GrouperChain = struct {
             .hac_descriptions = hac_descriptions,
             .hac_formula_data = hac_formula_data,
             .formula_data = formula_data,
+            .cm_conversions = cm_conversions,
+            .pcs_conversions = pcs_conversions,
             .allocator = allocator,
         };
 
@@ -184,6 +200,38 @@ pub const GrouperChain = struct {
         self.hac_descriptions.deinit();
         self.hac_formula_data.deinit();
         self.formula_data.deinit();
+
+        // Free conversion data if loaded
+        if (self.cm_conversions) |*c| c.deinit();
+        if (self.pcs_conversions) |*c| c.deinit();
+    }
+
+    /// Convert MS-DRG version number to ICD-10 fiscal year.
+    pub fn versionToYear(version: i32) u32 {
+        return switch (version) {
+            400, 401 => 2023,
+            410, 411 => 2024,
+            420, 421 => 2025,
+            430, 431 => 2026,
+            else => 0,
+        };
+    }
+
+    /// Look up a single DX code conversion.
+    /// Returns the converted code as a sentinel string allocated with `alloc`, or null if no mapping.
+    pub fn convertDxCode(self: *const GrouperChain, code: []const u8, source_year: u32, target_year: u32, alloc: std.mem.Allocator) !?[:0]const u8 {
+        if (self.cm_conversions) |*conv| {
+            return try conv.convertCode(code, source_year, target_year, alloc);
+        }
+        return null;
+    }
+
+    /// Look up a single procedure code conversion.
+    pub fn convertPrCode(self: *const GrouperChain, code: []const u8, source_year: u32, target_year: u32, alloc: std.mem.Allocator) !?[:0]const u8 {
+        if (self.pcs_conversions) |*conv| {
+            return try conv.convertCode(code, source_year, target_year, alloc);
+        }
+        return null;
     }
 
     /// Returns the pre-built Link for the given version.

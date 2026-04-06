@@ -6,11 +6,25 @@ Zig shared library via ctypes.
 """
 
 import ctypes
+import copy
 from typing import Literal, TypedDict
 
 from msdrg._json import dumps as _dumps, loads as _loads
 from msdrg._native import find_data_dir, get_lib
 from msdrg._validation import validate_claim
+
+
+# MS-DRG version → ICD-10 fiscal year
+_VERSION_TO_YEAR: dict[int, int] = {
+    400: 2023,
+    401: 2023,
+    410: 2024,
+    411: 2024,
+    420: 2025,
+    421: 2025,
+    430: 2026,
+    431: 2026,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -44,6 +58,7 @@ class ClaimInput(TypedDict, total=False):
     discharge_status: int  # CMS discharge status code (e.g. 1, 2, 3, ... 20, etc.)
     hospital_status: Literal["EXEMPT", "NOT_EXEMPT", "UNKNOWN"]
     tie_breaker: Literal["CLINICAL_SIGNIFICANCE", "ALPHABETICAL"]
+    source_icd_version: int  # Source ICD-10 fiscal year (e.g. 2025) for code conversion
     pdx: DiagnosisInput
     admit_dx: DiagnosisInput
     sdx: list[DiagnosisInput]
@@ -114,6 +129,15 @@ class GrouperFlagsOutput(TypedDict, total=False):
     hac_status_value: HacStatus
 
 
+class CodeConversion(TypedDict):
+    """A single code conversion performed before grouping."""
+
+    original: str
+    converted: str
+    code_type: str  # "dx" or "pr"
+    field: str  # "pdx", "admit_dx", "sdx", "procedures"
+
+
 class GroupResult(TypedDict, total=False):
     """
     Result from ``MsdrgGrouper.group()``.
@@ -139,6 +163,7 @@ class GroupResult(TypedDict, total=False):
     sdx_output: list[DiagnosisOutput]
     proc_output: list[ProcedureOutput]
     grouper_flags: GrouperFlagsOutput
+    conversions: list[CodeConversion]  # ICD version conversions (empty if none)
 
 
 # ---------------------------------------------------------------------------
@@ -281,6 +306,23 @@ class MsdrgGrouper:
 
         self.lib.msdrg_string_free.argtypes = [ctypes.c_void_p]
         self.lib.msdrg_string_free.restype = None
+
+        # --- Conversion functions ---
+        self.lib.msdrg_convert_dx.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_char_p,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+        ]
+        self.lib.msdrg_convert_dx.restype = ctypes.c_void_p
+
+        self.lib.msdrg_convert_pr.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_char_p,
+            ctypes.c_uint32,
+            ctypes.c_uint32,
+        ]
+        self.lib.msdrg_convert_pr.restype = ctypes.c_void_p
 
         # --- Result ---
         self.lib.msdrg_result_free.argtypes = [ctypes.c_void_p]
@@ -631,6 +673,85 @@ class MsdrgGrouper:
             "proc_output": proc_output,
         }
 
+    def _convert_code(
+        self, code: str, source_year: int, target_year: int, is_dx: bool
+    ) -> str:
+        """Convert a single code using the native converter. Returns original if no mapping."""
+        fn = self.lib.msdrg_convert_dx if is_dx else self.lib.msdrg_convert_pr
+        ptr = fn(self.ctx, code.encode("utf-8"), source_year, target_year)
+        if ptr:
+            try:
+                result = ctypes.cast(ptr, ctypes.c_char_p).value
+                if result:
+                    return result.decode("utf-8") or code
+            finally:
+                self.lib.msdrg_string_free(ptr)
+        return code
+
+    def _maybe_convert_claim(
+        self, claim_data: ClaimInput
+    ) -> tuple[ClaimInput, list[CodeConversion]]:
+        """
+        If source_icd_version is set, convert all codes to the target version.
+
+        Returns:
+            A tuple of (converted_claim, conversions). The claim is a deep copy
+            if conversion occurred, otherwise the original. Conversions lists
+            each code that was actually changed.
+        """
+        source_year = claim_data.get("source_icd_version")
+        if source_year is None:
+            return claim_data, []
+
+        version = claim_data.get("version")
+        if version is None:
+            return claim_data, []
+
+        target_year = _VERSION_TO_YEAR.get(version)
+        if target_year is None or source_year == target_year:
+            return claim_data, []
+
+        claim = copy.deepcopy(claim_data)
+        conversions: list[CodeConversion] = []
+
+        def _convert_field(code_obj: dict, field: str, code_type: str) -> None:
+            original = code_obj.get("code")
+            if original is None:
+                return
+            converted = self._convert_code(
+                original, source_year, target_year, is_dx=(code_type == "dx")
+            )
+            if converted != original:
+                conversions.append(
+                    {
+                        "original": original,
+                        "converted": converted,
+                        "code_type": code_type,
+                        "field": field,
+                    }
+                )
+            code_obj["code"] = converted
+
+        # PDX
+        pdx = claim.get("pdx")
+        if pdx:
+            _convert_field(pdx, "pdx", "dx")
+
+        # Admit DX
+        admit = claim.get("admit_dx")
+        if admit:
+            _convert_field(admit, "admit_dx", "dx")
+
+        # SDX
+        for i, sdx in enumerate(claim.get("sdx", [])):
+            _convert_field(sdx, f"sdx[{i}]", "dx")
+
+        # Procedures
+        for i, proc in enumerate(claim.get("procedures", [])):
+            _convert_field(proc, f"procedures[{i}]", "pr")
+
+        return claim, conversions
+
     def group(self, claim_data: ClaimInput) -> GroupResult:
         """
         Group a claim through the MS-DRG classification pipeline.
@@ -655,6 +776,9 @@ class MsdrgGrouper:
 
         validate_claim(claim_data)
 
+        # Convert codes if source_icd_version is set
+        claim_data, conversions = self._maybe_convert_claim(claim_data)
+
         json_bytes = _dumps(claim_data)
 
         result_ptr = self.lib.msdrg_group_json(self.ctx, json_bytes)
@@ -673,7 +797,9 @@ class MsdrgGrouper:
 
         try:
             result_json = ctypes.cast(result_ptr, ctypes.c_char_p).value.decode("utf-8")
-            return _loads(result_json)
+            result: GroupResult = _loads(result_json)
+            result["conversions"] = conversions
+            return result
         finally:
             self.lib.msdrg_string_free(result_ptr)
 
@@ -697,6 +823,9 @@ class MsdrgGrouper:
 
         validate_claim(claim_data)
 
+        # Convert codes if source_icd_version is set
+        claim_data, conversions = self._maybe_convert_claim(claim_data)
+
         version = claim_data.get("version")
         if version is None:
             raise ValueError("Claim must include 'version'")
@@ -719,7 +848,9 @@ class MsdrgGrouper:
                 )
 
             try:
-                return self._read_result(result_ptr)
+                result = self._read_result(result_ptr)
+                result["conversions"] = conversions
+                return result
             finally:
                 self.lib.msdrg_result_free(result_ptr)
         finally:
@@ -740,6 +871,7 @@ def create_claim(
     pdx_poa: str | None = None,
     sdx: list[str] | list[tuple[str, str]] | None = None,
     procedures: list[str] | None = None,
+    source_icd_version: int | None = None,
 ) -> ClaimInput:
     """
     Build a claim dictionary from simple arguments.
@@ -757,6 +889,8 @@ def create_claim(
         sdx: Secondary diagnoses — strings ("I5020") or tuples ("I5020", "Y")
              for POA support
         procedures: Procedure codes
+        source_icd_version: Source ICD-10 fiscal year for code conversion
+             (e.g. 2025 to convert FY2025 codes to the grouper's version)
 
     Returns:
         A ``ClaimInput`` dictionary ready for ``MsdrgGrouper.group()``.
@@ -773,6 +907,13 @@ def create_claim(
         ...     pdx="I5020", pdx_poa="Y",
         ...     sdx=[("E1165", "Y"), ("I10", "N")],
         ... )
+
+        >>> # With ICD version conversion:
+        >>> claim = create_claim(
+        ...     version=431, source_icd_version=2025,
+        ...     age=65, sex=0, discharge_status=1,
+        ...     pdx="I5020", sdx=["E1165"],
+        ... )
     """
     pdx_dict: DiagnosisInput = {"code": pdx}
     if pdx_poa is not None:
@@ -785,7 +926,7 @@ def create_claim(
         else:
             sdx_list.append({"code": item})
 
-    return {
+    claim: ClaimInput = {
         "version": version,
         "age": age,
         "sex": sex,
@@ -794,3 +935,7 @@ def create_claim(
         "sdx": sdx_list,
         "procedures": [{"code": c} for c in (procedures or [])],
     }
+    if source_icd_version is not None:
+        claim["source_icd_version"] = source_icd_version
+
+    return claim

@@ -9,12 +9,13 @@
 
 ---
 
-mz-drg provides open-source reimplementations of two CMS tools:
+mz-drg provides open-source reimplementations of CMS tools:
 
 - **MS-DRG Grouper** — assigns Diagnosis Related Groups based on diagnoses, procedures, and demographics
 - **Medicare Code Editor (MCE)** — validates ICD diagnosis and procedure codes against CMS edit rules
+- **ICD-10 Converter** — maps codes between fiscal year versions using CMS conversion tables
 
-Both are written in [Zig](https://ziglang.org), callable from Python, and validated against the CMS reference Java implementations with a 100% match rate on 50,000+ claims.
+All are written in [Zig](https://ziglang.org), callable from Python, and validated against the CMS reference Java implementations with a 100% match rate on 50,000+ claims.
 
 ## Why mz-drg?
 
@@ -99,6 +100,38 @@ with msdrg.MsdrgGrouper() as g, msdrg.MceEditor() as mce:
     mce_result = mce.edit(claim)
 ```
 
+### ICD-10 Code Conversion
+
+```python
+import msdrg
+
+with msdrg.IcdConverter() as conv:
+    # Convert a diagnosis code from FY2025 to FY2026
+    new_code = conv.convert_dx("B880", source_year=2025, target_year=2026)
+    print(new_code)  # "B8801"
+
+    # Batch convert
+    results = conv.convert_dx_batch(
+        ["B880", "I5020", "A047"],
+        source_year=2025, target_year=2026,
+    )
+```
+
+### Grouper with auto-conversion
+
+```python
+with msdrg.MsdrgGrouper() as g:
+    result = g.group({
+        "version": 431,               # Target: FY2026
+        "source_icd_version": 2025,   # Source: FY2025 codes
+        "age": 65, "sex": 0, "discharge_status": 1,
+        "pdx": {"code": "B880"},       # Auto-converted to B8801
+    })
+
+print(result["conversions"])
+# [{"original": "B880", "converted": "B8801", "code_type": "dx", "field": "pdx"}]
+```
+
 ## MS-DRG Grouper
 
 ### Input format
@@ -111,6 +144,7 @@ with msdrg.MsdrgGrouper() as g, msdrg.MceEditor() as mce:
     "discharge_status": 1,       # 1=Home/Self Care, 20=Died
     "hospital_status": "NOT_EXEMPT",  # "NOT_EXEMPT" (default), "EXEMPT", or "UNKNOWN"
     "tie_breaker": "CLINICAL_SIGNIFICANCE",  # "CLINICAL_SIGNIFICANCE" (default) or "ALPHABETICAL"
+    "source_icd_version": 2025,  # Source ICD-10 year for code conversion (optional)
     "pdx": {                     # Principal diagnosis (required)
         "code": "I5020",
         "poa": "Y"               # Present on Admission: Y/N/U/W (optional)
@@ -169,7 +203,8 @@ The `tie_breaker` field controls how the grouper resolves attribute matches when
         "flags": ["VALID", "MARKED_FOR_INITIAL", "MARKED_FOR_FINAL"]
     },
     "sdx_output": [...],
-    "proc_output": [...]
+    "proc_output": [...],
+    "conversions": []  # ICD version conversions (empty if source_icd_version not set)
 }
 ```
 
@@ -255,28 +290,31 @@ The MCE detects ~35 edit types including:
 
 ### MCE validation
 
-The MCE implementation is validated against the CMS Java MCE 2.0 v43.1 with a 100% match rate on 50l,000 test claims.
+The MCE implementation is validated against the CMS Java MCE 2.0 v43.1 with a 100% match rate on 50,000 test claims.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  Python (msdrg)                                      │
-│  ctypes ──► C API (c_api.zig, mce_c_api.zig)        │
-│                │                                     │
-│    ┌───────────┴───────────┐                         │
-│    ▼                       ▼                         │
-│  MS-DRG Grouper         MCE Editor                  │
-│  (GrouperChain)         (MceComponent)              │
-│    │                       │                         │
-│    ▼                       ▼                         │
-│  Chain of Links:        Validation Pipeline:        │
-│  Preprocess → Group     Code Check → Edit Rules     │
-│  → HAC → Final DRG      → Output Counts            │
-│    │                       │                         │
-│    ▼                       ▼                         │
-│  Memory-mapped .bin files (22 total)                │
-└──────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  Python (msdrg)                                              │
+│  ctypes ──► C API (c_api.zig, mce_c_api.zig)                │
+│                │                                             │
+│    ┌───────────┼─────────────────┐                           │
+│    ▼           ▼                 ▼                           │
+│  MS-DRG     MCE Editor     ICD-10 Converter                 │
+│  Grouper    (MceComponent)  (ConversionData)                │
+│    │           │                 │                           │
+│    ▼           ▼                 ▼                           │
+│  Chain of    Validation     Code Lookup:                    │
+│  Links:      Pipeline:      Binary search                   │
+│  Preprocess  Code Check     on sorted                       │
+│  → Group     → Edit Rules   conversion                      │
+│  → HAC       → Output       entries                         │
+│  → Final DRG   Counts                                        │
+│    │           │                 │                           │
+│    ▼           ▼                 ▼                           │
+│  Memory-mapped .bin files (24 total)                        │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 Both engines share the same shared library and data files. The grouping pipeline is a chain of composable processors; the MCE is a linear validation pipeline. Both mirror the original Java architecture for validation purposes.
@@ -370,6 +408,7 @@ MsdrgInput inp = msdrg_input_create();
 msdrg_input_set_pdx(inp, "I5020", 'Y');
 msdrg_input_add_sdx(inp, "E1165", 'Y');
 msdrg_input_set_demographics(inp, 65, 0, 1);
+msdrg_input_set_source_icd_year(inp, 2025);  // Optional: auto-convert codes
 
 MsdrgResult res = msdrg_group(ver, inp);
 int32_t drg = msdrg_result_get_final_drg(res);
@@ -395,6 +434,25 @@ msdrg_string_free(result);
 mce_context_free(mce);
 ```
 
+### ICD-10 Code Conversion
+
+```c
+#include "msdrg.h"
+
+MsdrgContext ctx = msdrg_context_init("/path/to/data/bin");
+
+// Convert a diagnosis code (FY2025 → FY2026)
+const char* converted = msdrg_convert_dx(ctx, "B880", 2025, 2026);
+// converted = "B8801"
+
+// Convert a procedure code
+const char* pr_conv = msdrg_convert_pr(ctx, "02703DZ", 2025, 2026);
+
+msdrg_string_free(converted);
+msdrg_string_free(pr_conv);
+msdrg_context_free(ctx);
+```
+
 Functions are thread-safe after initialization. The context is immutable and can be shared across threads.
 
 ## Project structure
@@ -404,7 +462,8 @@ mz-drg/
 ├── msdrg/                       # Python package
 │   ├── __init__.py
 │   ├── grouper.py               # MsdrgGrouper class
-│   └── mce.py                   # MceEditor class
+│   ├── mce.py                   # MceEditor class
+│   └── converter.py             # IcdConverter class
 ├── zig_src/                     # Zig source
 │   ├── build.zig
 │   ├── main.zig
@@ -418,6 +477,7 @@ mz-drg/
 │       ├── grouping.zig         # DRG formula matching
 │       ├── marking.zig          # Code marking logic
 │       ├── hac.zig              # Hospital-Acquired Conditions
+│       ├── conversion.zig       # ICD-10 code conversion
 │       ├── mce.zig              # MCE main editor
 │       ├── mce_c_api.zig        # MCE C ABI exports
 │       ├── mce_json_api.zig     # MCE JSON in/out
@@ -425,9 +485,13 @@ mz-drg/
 │       ├── mce_enums.zig        # MCE attributes & edits
 │       ├── mce_editing.zig      # MCE edit rules
 │       └── mce_validation.zig   # MCE validation logic
-├── data/bin/                    # Prebuilt binary data (22 files)
+├── data/bin/                    # Prebuilt binary data (24 files)
 ├── scripts/                     # Data extraction & compilation
-├── tests/                       # Comparison & benchmark tools
+│   ├── compile_icd_conversions.py  # ICD conversion table compiler
+│   └── ...
+├── tests/                       # Tests & comparison tools
+│   ├── example.py               # All-components example
+│   └── ...
 ├── pyproject.toml
 └── setup.py
 ```
