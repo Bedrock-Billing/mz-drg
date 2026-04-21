@@ -209,7 +209,7 @@ def _download_and_extract(
             # Find the text file that likely contains the conversion table
             # For CM: usually 'gem_i9gem.txt' or similar? No, conversion table is different.
             # It's usually "icd10cm_conversion_{year}.txt" or similar.
-            # Let's search for a .txt file that seems right.
+            # Search for a .txt file that seems right.
 
             target_file_name = None
             for name in z.namelist():

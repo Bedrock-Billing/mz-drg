@@ -29,53 +29,23 @@ pub const DescriptionData = struct {
         return DescriptionData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8, magic: u32) !DescriptionData {
+        const mapped = try common.MappedFile(DescriptionHeader).initWithData(data, magic);
+        return DescriptionData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *DescriptionData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const DescriptionData) []const DescriptionEntry {
-        const entries_ptr = @as([*]const DescriptionEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return entries_ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const DescriptionData) ![]align(1) const DescriptionEntry {
+        return try self.mapped.getSlice(DescriptionEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
-    pub fn getEntry(self: *const DescriptionData, id: u16, version: i32) ?DescriptionEntry {
-        const entries = self.getEntries();
-        var left: usize = 0;
-        var right: usize = entries.len;
-
-        while (left < right) {
-            const mid = left + (right - left) / 2;
-            const entry = entries[mid];
-
-            if (entry.id < id) {
-                left = mid + 1;
-            } else if (entry.id > id) {
-                right = mid;
-            } else {
-                // Found match, check version
-                if (version >= entry.version_start and version <= entry.version_end) {
-                    return entry;
-                }
-                // Scan backwards
-                var i = mid;
-                while (i > 0) {
-                    i -= 1;
-                    const prev = entries[i];
-                    if (prev.id != id) break;
-                    if (version >= prev.version_start and version <= prev.version_end) return prev;
-                }
-                // Scan forwards
-                i = mid + 1;
-                while (i < entries.len) {
-                    const next = entries[i];
-                    if (next.id != id) break;
-                    if (version >= next.version_start and version <= next.version_end) return next;
-                    i += 1;
-                }
-                return null;
-            }
-        }
-        return null;
+    pub fn getEntry(self: *const DescriptionData, id: u16, version: i32) !?DescriptionEntry {
+        const entries = try self.getEntries();
+        const Adapter = common.search.intKey(DescriptionEntry, u16, "id");
+        return common.search.versionedBinarySearch(DescriptionEntry, u16, Adapter.getKey, Adapter.compare, Adapter.equal, entries, id, version);
     }
 };
 
@@ -132,14 +102,14 @@ test "DescriptionData lookup" {
     var data = try DescriptionData.init(filename, 0x42445247);
     defer data.deinit();
 
-    const d1 = data.getEntry(1, 405);
+    const d1 = try data.getEntry(1, 405);
     try std.testing.expect(d1 != null);
     try std.testing.expectEqual(@as(u16, 1), d1.?.id);
 
-    const d2 = data.getEntry(2, 420);
+    const d2 = try data.getEntry(2, 420);
     try std.testing.expect(d2 != null);
     try std.testing.expectEqual(@as(u16, 2), d2.?.id);
 
-    const d3 = data.getEntry(1, 420); // Version mismatch
+    const d3 = try data.getEntry(1, 420); // Version mismatch
     try std.testing.expect(d3 == null);
 }

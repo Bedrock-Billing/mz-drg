@@ -181,9 +181,9 @@ fn editName(index: usize) []const u8 {
 
 test "processMceJson valid claim" {
     const allocator = std.testing.allocator;
-    const data_dir = "../data/bin/";
+    const data_path = "../data/msdrg.mdb";
 
-    var comp = mce.MceComponent.init(data_dir, allocator) catch |err| {
+    var comp = mce.MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
         return;
     };
@@ -206,9 +206,9 @@ test "processMceJson valid claim" {
 
 test "processMceJson E-code as PDX" {
     const allocator = std.testing.allocator;
-    const data_dir = "../data/bin/";
+    const data_path = "../data/msdrg.mdb";
 
-    var comp = mce.MceComponent.init(data_dir, allocator) catch |err| {
+    var comp = mce.MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
         return;
     };

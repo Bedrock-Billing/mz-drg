@@ -18,21 +18,26 @@ pub const ClusterInfoData = struct {
         return ClusterInfoData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !ClusterInfoData {
+        const mapped = try common.MappedFile(ClusterInfoHeader).initWithData(data, 0x434C494E);
+        return ClusterInfoData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *ClusterInfoData) void {
         self.mapped.deinit();
     }
 
-    pub fn getClusterOffset(self: *const ClusterInfoData, cluster_index: usize) u32 {
-        const offsets_ptr = @as([*]const u32, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.offsets_offset)));
-        return offsets_ptr[cluster_index];
+    pub fn getClusterOffset(self: *const ClusterInfoData, cluster_index: usize) !u32 {
+        const offsets = try self.mapped.getSlice(u32, self.mapped.header.offsets_offset, self.mapped.header.num_clusters);
+        return offsets[cluster_index];
     }
 
-    pub fn getCluster(self: *const ClusterInfoData, cluster_index: usize) Cluster {
-        const offset = self.getClusterOffset(cluster_index);
+    pub fn getCluster(self: *const ClusterInfoData, cluster_index: usize) !Cluster {
+        const offset = try self.getClusterOffset(cluster_index);
         return Cluster{
             .base_ptr = self.mapped.base_ptr(),
             .data_ptr = self.mapped.base_ptr() + offset,
-            .limit = self.mapped.base_ptr() + self.mapped.map.memory.len,
+            .limit = self.mapped.base_ptr() + self.mapped.data.len,
         };
     }
 };
@@ -223,7 +228,7 @@ test "ClusterInfoData accessors" {
     var data = try ClusterInfoData.init(filename);
     defer data.deinit();
 
-    const cluster = data.getCluster(0);
+    const cluster = try data.getCluster(0);
     try std.testing.expectEqualStrings("CODE1", cluster.getName());
 
     const supp = cluster.getSuppressionMdcs();
@@ -266,57 +271,26 @@ pub const ClusterMapData = struct {
         return ClusterMapData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !ClusterMapData {
+        const mapped = try common.MappedFile(ClusterMapHeader).initWithData(data, 0x434C4D50);
+        return ClusterMapData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *ClusterMapData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const ClusterMapData) []const ClusterMapEntry {
-        const entries_ptr = @as([*]const ClusterMapEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return entries_ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const ClusterMapData) ![]align(1) const ClusterMapEntry {
+        return try self.mapped.getSlice(ClusterMapEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
-    pub fn getClusters(self: *const ClusterMapData, entry: ClusterMapEntry) []const u16 {
-        const list_ptr = @as([*]const u16, @ptrCast(@alignCast(self.mapped.base_ptr() + entry.list_offset)));
-        return list_ptr[0..entry.list_count];
+    pub fn getClusters(self: *const ClusterMapData, entry: ClusterMapEntry) ![]align(1) const u16 {
+        return try self.mapped.getSlice(u16, entry.list_offset, entry.list_count);
     }
 
-    pub fn getEntry(self: *const ClusterMapData, code: []const u8, version: i32) ?ClusterMapEntry {
-        const entries = self.getEntries();
-        var left: usize = 0;
-        var right: usize = entries.len;
-
-        while (left < right) {
-            const mid = left + (right - left) / 2;
-            const entry = entries[mid];
-            const entry_code = entry.code.toSlice();
-
-            const order = std.mem.order(u8, entry_code, code);
-            switch (order) {
-                .lt => left = mid + 1,
-                .gt => right = mid,
-                .eq => {
-                    if (version >= entry.version_start and version <= entry.version_end) {
-                        return entry;
-                    }
-                    // Scan around
-                    var i = mid;
-                    while (i > 0) {
-                        i -= 1;
-                        const prev = entries[i];
-                        if (!std.mem.eql(u8, prev.code.toSlice(), code)) break;
-                        if (version >= prev.version_start and version <= prev.version_end) return prev;
-                    }
-                    i = mid + 1;
-                    while (i < entries.len) {
-                        const next = entries[i];
-                        if (!std.mem.eql(u8, next.code.toSlice(), code)) break;
-                        if (version >= next.version_start and version <= next.version_end) return next;
-                        i += 1;
-                    }
-                    return null;
-                },
-            }
-        }
-        return null;
+    pub fn getEntry(self: *const ClusterMapData, code: []const u8, version: i32) !?ClusterMapEntry {
+        const entries = try self.getEntries();
+        const Adapter = common.search.codeKey(ClusterMapEntry);
+        return common.search.versionedBinarySearch(ClusterMapEntry, []const u8, Adapter.getKey, Adapter.compare, Adapter.equal, entries, code, version);
     }
 };

@@ -39,20 +39,6 @@ def group(self, claim_data: ClaimInput) -> GroupResult
 
 **Raises:** `RuntimeError` if the grouper has been closed or the native engine returns null.
 
-#### `group_structured(claim_data)`
-
-Group a claim using the structured C API (individual getter/setter calls, no JSON serialization).
-
-This method builds a native `MsdrgInput` handle via individual FFI calls, executes `msdrg_group()`, and reads the result via ~25 getter calls. It avoids JSON parsing on the Zig side but incurs higher Python FFI overhead (~30 crossings vs. 2 for `group()`).
-
-Best suited for C/C++/Rust callers where FFI cost is negligible, or when you need to avoid JSON entirely. For Python bulk processing, `group()` is faster.
-
-```python
-def group_structured(self, claim_data: ClaimInput) -> GroupResult
-```
-
-**Returns:** Identical `GroupResult` dictionary as `group()`.
-
 #### `close()`
 
 Explicitly free the grouper context and release resources.

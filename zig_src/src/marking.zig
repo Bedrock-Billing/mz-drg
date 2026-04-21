@@ -65,16 +65,7 @@ fn markDiagnosisCodes(
         allocator.free(sev_key);
     }
 
-    var lexer = formula.Lexer.init(formula_str);
-    var tokens = try lexer.tokenize(allocator);
-    defer tokens.deinit(allocator);
-
-    var parser = formula.Parser.init(allocator, tokens.items);
-    const root = parser.parse() catch |err| {
-        std.debug.print("Error parsing formula: {s}\n", .{formula_str});
-        return err;
-    };
-    defer formula.Evaluator.free(root, allocator);
+    const root = try context.ast_cache.getOrParse(formula_str);
 
     var formula_attributes = std.StringHashMap(void).init(allocator);
     defer {
@@ -337,16 +328,7 @@ fn markProcedureCodes(
         allocator.free(sev_key);
     }
 
-    var lexer = formula.Lexer.init(formula_str);
-    var tokens = try lexer.tokenize(allocator);
-    defer tokens.deinit(allocator);
-
-    var parser = formula.Parser.init(allocator, tokens.items);
-    const root = parser.parse() catch |err| {
-        std.debug.print("Error parsing formula: {s}\n", .{formula_str});
-        return err;
-    };
-    defer formula.Evaluator.free(root, allocator);
+    const root = try context.ast_cache.getOrParse(formula_str);
 
     var formula_attributes = std.StringHashMap(void).init(allocator);
     defer {
@@ -693,9 +675,6 @@ fn markSigTrauma(matched_attributes: *std.StringHashMap(void), dx_codes: []model
             dx.drg_impact = updateImpact(dx.drg_impact, impact);
             sig_trauma_counter += 1;
         }
-        for (SIG_TRAUMAS) |st| {
-            _ = matched_attributes.remove(st);
-        }
     }
 }
 
@@ -736,14 +715,15 @@ fn commonDiagnosisFunctionMarking(
         };
         const sev_key = try allocator.dupe(u8, sev_str);
         try mask.put(sev_key, 0);
+        defer {
+            _ = mask.remove(sev_key);
+            allocator.free(sev_key);
+        }
 
-        var lexer = formula.Lexer.init(formula_str);
-        var tokens = try lexer.tokenize(allocator);
-        defer tokens.deinit(allocator);
-
-        var parser = formula.Parser.init(allocator, tokens.items);
-        const root = parser.parse() catch return;
-        defer formula.Evaluator.free(root, allocator);
+        const root = context.ast_cache.getOrParse(formula_str) catch {
+            std.debug.print("AST Parse Failed: {s}\n", .{formula_str});
+            return error.ASTParseFailed;
+        };
 
         var matched_attributes = std.StringHashMap(void).init(allocator);
         defer {
@@ -832,12 +812,6 @@ fn markStents(matched_attributes: *std.StringHashMap(void), proc_codes: []models
                 }
             }
         }
-
-        // Phase 3: Cleanup matched attributes
-        for (STENTS) |s| _ = matched_attributes.remove(s);
-        _ = matched_attributes.remove(ARTERIAL);
-        _ = matched_attributes.remove(NOR_DRUG_STENT);
-        _ = matched_attributes.remove(NOR_STENT);
     }
 }
 
@@ -856,9 +830,9 @@ fn markVessels(matched_attributes: *std.StringHashMap(void), proc_codes: []model
             proc.mark(mark_flag);
             proc.drg_impact = updateImpact(proc.drg_impact, impact);
         }
-        for (VESSELS) |v| _ = matched_attributes.remove(v);
     }
 }
+
 
 fn commonProcedureFunctionMarking(
     context: models.ProcessingContext,
@@ -893,14 +867,12 @@ fn commonProcedureFunctionMarking(
         };
         const sev_key = try allocator.dupe(u8, sev_str);
         try mask.put(sev_key, 0);
+        defer {
+            _ = mask.remove(sev_key);
+            allocator.free(sev_key);
+        }
 
-        var lexer = formula.Lexer.init(formula_str);
-        var tokens = try lexer.tokenize(allocator);
-        defer tokens.deinit(allocator);
-
-        var parser = formula.Parser.init(allocator, tokens.items);
-        const root = parser.parse() catch return;
-        defer formula.Evaluator.free(root, allocator);
+        const root = context.ast_cache.getOrParse(formula_str) catch return;
 
         var matched_attributes = std.StringHashMap(void).init(allocator);
         defer {

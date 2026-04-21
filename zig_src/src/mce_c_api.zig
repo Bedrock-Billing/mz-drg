@@ -12,13 +12,13 @@ pub const MceContext = opaque {};
 
 // --- Context Management ---
 
-pub export fn mce_context_init(data_dir: [*c]const u8) ?*MceContext {
-    if (data_dir == null) return null;
+pub export fn mce_context_init(data_path: [*c]const u8) ?*MceContext {
+    if (data_path == null) return null;
 
-    const dir_slice = std.mem.span(data_dir);
+    const path_slice = std.mem.span(data_path);
 
     const ctx = mce_allocator.create(mce.MceComponent) catch return null;
-    ctx.* = mce.MceComponent.init(dir_slice, mce_allocator) catch {
+    ctx.* = mce.MceComponent.init(path_slice, mce_allocator) catch {
         mce_allocator.destroy(ctx);
         return null;
     };
@@ -53,8 +53,8 @@ pub export fn mce_edit_json(ctx: ?*MceContext, json_str: [*c]const u8) [*c]const
 }
 
 // --- Thread Safety ---
-// MceContext is NOT thread-safe — each thread should create its own context.
-// This matches the Java MceComponent behavior.
+// MceContext is thread-safe after initialization and can be safely shared
+// across multiple threads. This matches the MsdrgContext behavior.
 
 // --- Tests ---
 
@@ -70,16 +70,16 @@ test "mce_context_free null context" {
 test "mce_edit_json null inputs" {
     try std.testing.expectEqual(@as([*c]const u8, null), mce_edit_json(null, null));
 
-    const data_dir = "../data/bin/";
-    const ctx = mce_context_init(data_dir.ptr) orelse return;
+    const data_path = "../data/msdrg.mdb";
+    const ctx = mce_context_init(data_path.ptr) orelse return;
     defer mce_context_free(ctx);
 
     try std.testing.expectEqual(@as([*c]const u8, null), mce_edit_json(ctx, null));
 }
 
 test "mce_context_init and edit valid claim" {
-    const data_dir = "../data/bin/";
-    const ctx = mce_context_init(data_dir.ptr) orelse return;
+    const data_path = "../data/msdrg.mdb";
+    const ctx = mce_context_init(data_path.ptr) orelse return;
     defer mce_context_free(ctx);
 
     const json_input = "{\"age\":65,\"sex\":0,\"discharge_status\":1,\"discharge_date\":20250101,\"pdx\":{\"code\":\"I5020\"},\"sdx\":[],\"procedures\":[]}";

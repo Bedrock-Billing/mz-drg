@@ -6,15 +6,15 @@
 cd zig_src && zig build test
 ```
 
-Covers unit tests for all modules: data structures, enums, validation, editing, grouping, MCE pipeline.
+Covers unit tests for all modules: data structures, enums, validation, editing, grouping, MCE pipeline. (~70 tests).
 
 ## Python tests
 
 ```bash
-python -m pytest tests/test_grouper.py tests/test_mce.py -v
+python -m pytest tests/test_grouper.py tests/test_mce.py tests/test_icd_conversions.py -v
 ```
 
-Covers MS-DRG grouping, MCE editing, lifecycle, edge cases, and error handling.
+Covers MS-DRG grouping, MCE editing, ICD-10 conversion, lifecycle, edge cases, and error handling.
 
 ## Comparison testing
 

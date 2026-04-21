@@ -16,12 +16,12 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from setuptools import setup
+from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 ROOT_DIR = Path(__file__).parent.resolve()
 ZIG_SRC_DIR = ROOT_DIR / "zig_src"
-DATA_SRC_DIR = ROOT_DIR / "data" / "bin"
+DATA_SRC_DIR = ROOT_DIR / "data"
 MSDRG_PKG_DIR = ROOT_DIR / "msdrg"
 
 MIN_ZIG_VERSION = (0, 16, 0)
@@ -164,34 +164,42 @@ class BuildZigExt(build_ext):
                 f"Searched:\n  - {zig_out_lib}\n  - {zig_out_bin}"
             )
 
-        # Copy library to package _lib directory
-        dest_lib_dir = MSDRG_PKG_DIR / "_lib"
-        dest_lib_dir.mkdir(exist_ok=True)
+        # Copy library to build_lib directory
+        dest_lib_dir = Path(self.build_lib) / "msdrg" / "_lib"
+        dest_lib_dir.mkdir(parents=True, exist_ok=True)
         dest_lib = dest_lib_dir / lib_name
 
         print(f"Installing library: {dest_lib}")
         shutil.copy2(str(built_lib), str(dest_lib))
+        
+        # Also copy to source tree for editable installs
+        src_lib_dir = MSDRG_PKG_DIR / "_lib"
+        src_lib_dir.mkdir(exist_ok=True)
+        shutil.copy2(str(built_lib), str(src_lib_dir / lib_name))
 
     def _copy_data_files(self):
         """Copy binary data files to the package data directory."""
-        dest_data_dir = MSDRG_PKG_DIR / "data"
-        dest_data_dir.mkdir(exist_ok=True)
+        dest_data_dir = Path(self.build_lib) / "msdrg" / "data"
+        dest_data_dir.mkdir(parents=True, exist_ok=True)
 
         if not DATA_SRC_DIR.exists():
             raise FileNotFoundError(f"Data source directory not found: {DATA_SRC_DIR}")
 
-        count = 0
-        for bin_file in sorted(DATA_SRC_DIR.glob("*.bin")):
-            dest = dest_data_dir / bin_file.name
-            shutil.copy2(str(bin_file), str(dest))
-            count += 1
+        mdb_file = DATA_SRC_DIR / "msdrg.mdb"
+        if not mdb_file.exists():
+            raise FileNotFoundError(f"LMDB file not found at {mdb_file}")
 
-        if count == 0:
-            raise FileNotFoundError(f"No .bin files found in {DATA_SRC_DIR}")
-
-        print(f"Installed {count} data files to {dest_data_dir}")
+        dest = dest_data_dir / "msdrg.mdb"
+        shutil.copy2(str(mdb_file), str(dest))
+        print(f"Installed msdrg.mdb to {dest_data_dir}")
+        
+        # Also copy to source tree for editable installs
+        src_data_dir = MSDRG_PKG_DIR / "data"
+        src_data_dir.mkdir(exist_ok=True)
+        shutil.copy2(str(mdb_file), str(src_data_dir / "msdrg.mdb"))
 
 
 setup(
+    ext_modules=[Extension("msdrg._lib", sources=[])],
     cmdclass={"build_ext": BuildZigExt},
 )

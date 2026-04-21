@@ -21,14 +21,10 @@ All are written in [Zig](https://ziglang.org), callable from Python, and validat
 
 The official CMS tools are Java applications. While accurate, they come with practical limitations:
 
-| | Java (CMS) | mz-drg |
-|---|---|---|
-| **Startup** | JVM warmup, seconds | Instant |
-| **Throughput (Ryzen 5 5600U)** | ~500 claims/sec | ~7,000+ claims/sec |
-| **Memory** | JVM heap overhead | Minimal, memory-mapped data |
-| **Dependencies** | JRE 17+, classpath management | Single shared library |
-| **Python integration** | JPype bridge (fragile) | Native ctypes (simple) |
-| **Embedding** | Requires JVM process | C ABI, any language |
+- **JVM Overhead** — Requires seconds for JVM warmup and significant heap memory.
+- **Throughput** — Java performance is typically ~500 claims/sec; `mz-drg` reaches **11,000+ claims/sec** on similar hardware.
+- **Minimal Footprint** — Uses memory-mapped LMDB data with zero-copy access.
+- **Embedding** — Simple C ABI enables integration with Python (ctypes), Rust, C++, and more.
 
 ## :rocket: Quick example
 

@@ -31,7 +31,7 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "msdrg"))
 
 
 JARS_DIR = os.path.join(PROJECT_ROOT, "jars")
-DATA_DIR = os.path.join(PROJECT_ROOT, "data", "bin")
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 LIB_PATH = os.path.join(PROJECT_ROOT, "zig_src", "zig-out", "lib", "libmsdrg.so")
 
 

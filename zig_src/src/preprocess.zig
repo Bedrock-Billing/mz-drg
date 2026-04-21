@@ -30,8 +30,8 @@ pub const MsdrgClusters = struct {
 
             for (data.procedure_codes.items) |proc| {
                 const code_slice = proc.value.toSlice();
-                if (self.cluster_map.getEntry(code_slice, self.version)) |entry| {
-                    const clusters = self.cluster_map.getClusters(entry);
+                if (try self.cluster_map.getEntry(code_slice, self.version)) |entry| {
+                    const clusters = try self.cluster_map.getClusters(entry);
                     for (clusters) |c_idx| {
                         try candidate_clusters.put(c_idx, {});
                     }
@@ -49,7 +49,7 @@ pub const MsdrgClusters = struct {
                 }
 
                 std.log.debug("MsdrgClusters: Processing cluster index {d}", .{c_idx});
-                const cl = self.cluster_info.getCluster(c_idx);
+                const cl = try self.cluster_info.getCluster(c_idx);
                 std.log.debug("MsdrgClusters: Got cluster, getting choices...", .{});
                 const choices = cl.getChoices();
                 const choice_count = choices.count;
@@ -142,12 +142,12 @@ pub const MsdrgExclusions = struct {
         if (data.principal_dx) |pdx| {
             const pdx_slice = pdx.value.toSlice();
             // Look up PDX in exclusion_ids to get group ID
-            if (self.exclusion_ids.getEntry(pdx_slice, self.version)) |entry| {
+            if (try self.exclusion_ids.getEntry(pdx_slice, self.version)) |entry| {
                 const group_id = @as(i32, @intCast(entry.value));
                 std.log.debug("MsdrgExclusions: PDX {s} maps to exclusion group {d}", .{ pdx_slice, group_id });
                 // Look up group ID in exclusion_groups
-                if (self.exclusion_groups.getGroup(group_id)) |group| {
-                    const excluded_codes = self.exclusion_groups.getCodes(group);
+                if (try self.exclusion_groups.getGroup(group_id)) |group| {
+                    const excluded_codes = try self.exclusion_groups.getCodes(group);
 
                     // Mark excluded SDX codes
                     for (data.sdx_codes.items) |*sdx| {
@@ -239,18 +239,18 @@ pub const PdxAttributeProcessor = struct {
 
         if (data.principal_dx) |*pdx| {
             const pdx_slice = pdx.value.toSlice();
-            if (self.diagnosis_data.getDiagnosis(pdx_slice, self.version)) |entry| {
-                const schemes = self.diagnosis_data.getSchemes();
+            if (try self.diagnosis_data.getDiagnosis(pdx_slice, self.version)) |entry| {
+                const schemes = try self.diagnosis_data.getSchemes();
                 if (entry.scheme_id >= 0 and entry.scheme_id < schemes.len) {
                     const scheme = schemes[@as(usize, @intCast(entry.scheme_id))];
 
                     // Get Attributes
                     if (scheme.operands_pattern >= 0) {
-                        if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.operands_pattern)))) |pat| {
-                            const attrs = self.dx_patterns.getAttributes(pat);
+                        if (try self.dx_patterns.getPattern(@as(u32, @intCast(scheme.operands_pattern)))) |pat| {
+                            const attrs = try self.dx_patterns.getAttributes(pat);
                             const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
-                                const attr_str = attr_ref.get(base);
+                                const attr_str = try attr_ref.get(base, self.dx_patterns.mapped.data.len);
                                 try pdx.attributes.append(allocator, models.Attribute{ .list_name = attr_str });
                             }
                         }
@@ -258,11 +258,11 @@ pub const PdxAttributeProcessor = struct {
 
                     // Get Dx Cat Attributes
                     if (scheme.dx_cat_list_pattern >= 0) {
-                        if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.dx_cat_list_pattern)))) |pat| {
-                            const attrs = self.dx_patterns.getAttributes(pat);
+                        if (try self.dx_patterns.getPattern(@as(u32, @intCast(scheme.dx_cat_list_pattern)))) |pat| {
+                            const attrs = try self.dx_patterns.getAttributes(pat);
                             const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
-                                const attr_str = attr_ref.get(base);
+                                const attr_str = try attr_ref.get(base, self.dx_patterns.mapped.data.len);
                                 try pdx.dx_cat_attributes.append(allocator, models.Attribute{ .list_name = attr_str });
                             }
                         }
@@ -270,11 +270,11 @@ pub const PdxAttributeProcessor = struct {
 
                     // Get HAC Attributes
                     if (scheme.hac_operand_pattern >= 0) {
-                        if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.hac_operand_pattern)))) |pat| {
-                            const attrs = self.dx_patterns.getAttributes(pat);
+                        if (try self.dx_patterns.getPattern(@as(u32, @intCast(scheme.hac_operand_pattern)))) |pat| {
+                            const attrs = try self.dx_patterns.getAttributes(pat);
                             const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
-                                const attr_str = attr_ref.get(base);
+                                const attr_str = try attr_ref.get(base, self.dx_patterns.mapped.data.len);
                                 try pdx.hac_attributes.append(allocator, models.Attribute{ .list_name = attr_str });
                             }
                         }
@@ -282,7 +282,7 @@ pub const PdxAttributeProcessor = struct {
 
                     // Gender Check and MDC
                     var mdc_set = false;
-                    if (self.gender_mdc.getEntry(pdx_slice, self.version)) |g_entry| {
+                    if (try self.gender_mdc.getEntry(pdx_slice, self.version)) |g_entry| {
                         // Code is on gender list
                         if (data.sex == .MALE) {
                             if (g_entry.male_mdc >= 0) {
@@ -328,7 +328,7 @@ pub const PdxAttributeProcessor = struct {
 
             if (has_hac11) {
                 var desc: []const u8 = "";
-                if (self.hac_descriptions.getEntry(11, self.version)) |hac_desc_entry| {
+                if (try self.hac_descriptions.getEntry(11, self.version)) |hac_desc_entry| {
                     desc = hac_desc_entry.getDescription(self.hac_descriptions.mapped.base_ptr());
                 }
 
@@ -342,14 +342,14 @@ pub const PdxAttributeProcessor = struct {
             }
 
             // Validate code
-            if (self.diagnosis_data.getDiagnosis(pdx_slice, self.version) != null) {
+            if (try self.diagnosis_data.getDiagnosis(pdx_slice, self.version) != null) {
                 pdx.mark(.VALID);
             }
         }
 
         if (data.admit_dx) |*admit_dx| {
             const admit_slice = admit_dx.value.toSlice();
-            if (self.diagnosis_data.getDiagnosis(admit_slice, self.version) != null) {
+            if (try self.diagnosis_data.getDiagnosis(admit_slice, self.version) != null) {
                 admit_dx.mark(.VALID);
             }
         }
@@ -375,10 +375,10 @@ pub const SdxAttributeProcessor = struct {
 
         for (data.sdx_codes.items) |*sdx| {
             const sdx_slice = sdx.value.toSlice();
-            if (self.diagnosis_data.getDiagnosis(sdx_slice, self.version)) |entry| {
+            if (try self.diagnosis_data.getDiagnosis(sdx_slice, self.version)) |entry| {
                 sdx.mark(.VALID);
 
-                const schemes = self.diagnosis_data.getSchemes();
+                const schemes = try self.diagnosis_data.getSchemes();
                 if (entry.scheme_id >= 0 and entry.scheme_id < schemes.len) {
                     const scheme = schemes[@as(usize, @intCast(entry.scheme_id))];
 
@@ -395,11 +395,11 @@ pub const SdxAttributeProcessor = struct {
 
                     // Get Attributes
                     if (scheme.operands_pattern >= 0) {
-                        if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.operands_pattern)))) |pat| {
-                            const attrs = self.dx_patterns.getAttributes(pat);
+                        if (try self.dx_patterns.getPattern(@as(u32, @intCast(scheme.operands_pattern)))) |pat| {
+                            const attrs = try self.dx_patterns.getAttributes(pat);
                             const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
-                                const attr_str = attr_ref.get(base);
+                                const attr_str = try attr_ref.get(base, self.dx_patterns.mapped.data.len);
                                 try sdx.attributes.append(allocator, models.Attribute{ .list_name = attr_str });
                             }
                         }
@@ -407,11 +407,11 @@ pub const SdxAttributeProcessor = struct {
 
                     // Get Dx Cat Attributes
                     if (scheme.dx_cat_list_pattern >= 0) {
-                        if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.dx_cat_list_pattern)))) |pat| {
-                            const attrs = self.dx_patterns.getAttributes(pat);
+                        if (try self.dx_patterns.getPattern(@as(u32, @intCast(scheme.dx_cat_list_pattern)))) |pat| {
+                            const attrs = try self.dx_patterns.getAttributes(pat);
                             const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
-                                const attr_str = attr_ref.get(base);
+                                const attr_str = try attr_ref.get(base, self.dx_patterns.mapped.data.len);
                                 try sdx.dx_cat_attributes.append(allocator, models.Attribute{ .list_name = attr_str });
                             }
                         }
@@ -419,11 +419,11 @@ pub const SdxAttributeProcessor = struct {
 
                     // Get HAC Attributes
                     if (scheme.hac_operand_pattern >= 0) {
-                        if (self.dx_patterns.getPattern(@as(u32, @intCast(scheme.hac_operand_pattern)))) |pat| {
-                            const attrs = self.dx_patterns.getAttributes(pat);
+                        if (try self.dx_patterns.getPattern(@as(u32, @intCast(scheme.hac_operand_pattern)))) |pat| {
+                            const attrs = try self.dx_patterns.getAttributes(pat);
                             const base = self.dx_patterns.mapped.base_ptr();
                             for (attrs) |attr_ref| {
-                                const attr_str = attr_ref.get(base);
+                                const attr_str = try attr_ref.get(base, self.dx_patterns.mapped.data.len);
                                 try sdx.hac_attributes.append(allocator, models.Attribute{ .list_name = attr_str });
                             }
                         }
@@ -446,7 +446,7 @@ pub const SdxAttributeProcessor = struct {
                         const hac_num = std.fmt.parseInt(u16, num_str, 10) catch continue;
 
                         var desc: []const u8 = "";
-                        if (self.hac_descriptions.getEntry(hac_num, self.version)) |hac_desc_entry| {
+                        if (try self.hac_descriptions.getEntry(hac_num, self.version)) |hac_desc_entry| {
                             desc = hac_desc_entry.getDescription(self.hac_descriptions.mapped.base_ptr());
                         }
 
@@ -507,18 +507,18 @@ pub const ProcedureAttributeProcessor = struct {
     fn processCode(self: *const ProcedureAttributeProcessor, proc: *models.ProcedureCode, allocator: std.mem.Allocator) !void {
         const code_slice = proc.value.toSlice();
         // Lookup in code map (version 400 assumed)
-        if (self.procedure_attributes.getEntry(code_slice, self.version)) |entry| {
+        if (try self.procedure_attributes.getEntry(code_slice, self.version)) |entry| {
             const pattern_id = @as(u32, @intCast(entry.value));
             std.log.debug("ProcedureAttributeProcessor: Code {s} -> Pattern ID {d}", .{ code_slice, pattern_id });
-            if (self.pr_patterns.getPattern(pattern_id)) |pat| {
-                const attrs = self.pr_patterns.getAttributes(pat);
+            if (try self.pr_patterns.getPattern(pattern_id)) |pat| {
+                const attrs = try self.pr_patterns.getAttributes(pat);
                 const base = self.pr_patterns.mapped.base_ptr();
 
                 var has_d477 = false;
                 var has_d468 = false;
 
                 for (attrs) |attr_ref| {
-                    const attr_str = attr_ref.get(base);
+                    const attr_str = try attr_ref.get(base, self.pr_patterns.mapped.data.len);
                     std.log.debug("ProcedureAttributeProcessor: Code {s} -> Attribute {s}", .{ code_slice, attr_str });
 
                     var attr = models.Attribute{ .list_name = attr_str };

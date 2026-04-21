@@ -32,68 +32,32 @@ pub const DiagnosisData = struct {
         return DiagnosisData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !DiagnosisData {
+        const mapped = try common.MappedFile(DiagnosisHeader).initWithData(data, 0x44494147);
+        return DiagnosisData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *DiagnosisData) void {
         self.mapped.deinit();
     }
 
-    pub fn getSchemes(self: *const DiagnosisData) []const MsdrgDiagnosis {
-        const schemes_ptr = @as([*]const MsdrgDiagnosis, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.schemes_offset)));
-        return schemes_ptr[0..self.mapped.header.num_schemes];
+    pub fn getSchemes(self: *const DiagnosisData) ![]align(1) const MsdrgDiagnosis {
+        return try self.mapped.getSlice(MsdrgDiagnosis, self.mapped.header.schemes_offset, self.mapped.header.num_schemes);
     }
 
-    pub fn getDiagnoses(self: *const DiagnosisData) []const DiagnosisEntry {
-        const diagnoses_ptr = @as([*]const DiagnosisEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.diagnoses_offset)));
-        return diagnoses_ptr[0..self.mapped.header.num_diagnoses];
+    pub fn getEntries(self: *const DiagnosisData) ![]align(1) const DiagnosisEntry {
+        return try self.mapped.getSlice(DiagnosisEntry, self.mapped.header.diagnoses_offset, self.mapped.header.num_diagnoses);
     }
 
-    pub fn getDiagnosis(self: *const DiagnosisData, code: []const u8, version: i32) ?DiagnosisEntry {
-        const diagnoses = self.getDiagnoses();
+    pub fn getDiagnoses(self: *const DiagnosisData) ![]align(1) const DiagnosisEntry {
+        return try self.getEntries();
+    }
 
-        // Binary search for the code
-        var left: usize = 0;
-        var right: usize = diagnoses.len;
+    pub fn getDiagnosis(self: *const DiagnosisData, code: []const u8, version: i32) !?DiagnosisEntry {
+        const diagnoses = try self.getDiagnoses();
 
-        while (left < right) {
-            const mid = left + (right - left) / 2;
-            const entry = diagnoses[mid];
-            const entry_code = entry.code.toSlice();
-
-            const order = std.mem.order(u8, entry_code, code);
-            switch (order) {
-                .lt => left = mid + 1,
-                .gt => right = mid,
-                .eq => {
-                    // Found a match, but there might be multiple versions.
-                    // We need to find the specific version.
-                    // Since we sorted by key, version_start, we can scan around.
-                    // But first, let's check if this one matches.
-                    if (version >= entry.version_start and version <= entry.version_end) {
-                        return entry;
-                    }
-
-                    // Scan backwards
-                    var i = mid;
-                    while (i > 0) {
-                        i -= 1;
-                        const prev = diagnoses[i];
-                        if (!std.mem.eql(u8, prev.code.toSlice(), code)) break;
-                        if (version >= prev.version_start and version <= prev.version_end) return prev;
-                    }
-
-                    // Scan forwards
-                    i = mid + 1;
-                    while (i < diagnoses.len) {
-                        const next = diagnoses[i];
-                        if (!std.mem.eql(u8, next.code.toSlice(), code)) break;
-                        if (version >= next.version_start and version <= next.version_end) return next;
-                        i += 1;
-                    }
-
-                    return null; // Code found, but version mismatch
-                },
-            }
-        }
-        return null;
+        const Adapter = common.search.codeKey(DiagnosisEntry);
+        return common.search.versionedBinarySearch(DiagnosisEntry, []const u8, Adapter.getKey, Adapter.compare, Adapter.equal, diagnoses, code, version);
     }
 };
 
@@ -148,21 +112,21 @@ test "DiagnosisData lookup" {
     defer data.deinit();
 
     // Test lookup
-    const d1 = data.getDiagnosis("A001", 405);
+    const d1 = try data.getDiagnosis("A001", 405);
     try std.testing.expect(d1 != null);
     try std.testing.expectEqual(@as(i32, 1), d1.?.scheme_id);
 
-    const d2 = data.getDiagnosis("A001", 420);
+    const d2 = try data.getDiagnosis("A001", 420);
     try std.testing.expect(d2 != null);
     try std.testing.expectEqual(@as(i32, 2), d2.?.scheme_id);
 
-    const d3 = data.getDiagnosis("B002", 400);
+    const d3 = try data.getDiagnosis("B002", 400);
     try std.testing.expect(d3 != null);
     try std.testing.expectEqual(@as(i32, 3), d3.?.scheme_id);
 
-    const d4 = data.getDiagnosis("C999", 400);
+    const d4 = try data.getDiagnosis("C999", 400);
     try std.testing.expect(d4 == null);
 
-    const d5 = data.getDiagnosis("A001", 399); // Version mismatch
+    const d5 = try data.getDiagnosis("A001", 399); // Version mismatch
     try std.testing.expect(d5 == null);
 }

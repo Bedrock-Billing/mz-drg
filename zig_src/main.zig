@@ -34,7 +34,7 @@ pub fn main(init: std.process.Init) !void {
     var data = models.ProcessingData.init(allocator);
     defer data.deinit();
 
-    var context = models.ProcessingContext.init(allocator, &data, .{});
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &chain.ast_cache);
 
     // Sample Case
     // We use a dummy code "A001" which might not be in the real data,
@@ -66,4 +66,6 @@ test {
     _ = @import("src/mce.zig");
     _ = @import("src/mce_json_api.zig");
     _ = @import("src/mce_c_api.zig");
+    _ = @import("src/json_api.zig");
+    _ = @import("src/c_api.zig");
 }

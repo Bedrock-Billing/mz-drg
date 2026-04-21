@@ -23,63 +23,24 @@ pub const GenderMdcData = struct {
         return GenderMdcData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !GenderMdcData {
+        const mapped = try common.MappedFile(GenderMdcHeader).initWithData(data, 0x47454E44);
+        return GenderMdcData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *GenderMdcData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const GenderMdcData) []const GenderMdcEntry {
-        const entries_ptr = @as([*]const GenderMdcEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return entries_ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const GenderMdcData) ![]align(1) const GenderMdcEntry {
+        return try self.mapped.getSlice(GenderMdcEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
-    pub fn getEntry(self: *const GenderMdcData, code: []const u8, version: i32) ?GenderMdcEntry {
-        const entries = self.getEntries();
+    pub fn getEntry(self: *const GenderMdcData, code: []const u8, version: i32) !?GenderMdcEntry {
+        const entries = try self.getEntries();
 
-        // Binary search for the code
-        var left: usize = 0;
-        var right: usize = entries.len;
-
-        while (left < right) {
-            const mid = left + (right - left) / 2;
-            const entry = entries[mid];
-            const entry_code = entry.code.toSlice();
-
-            const order = std.mem.order(u8, entry_code, code);
-            switch (order) {
-                .lt => left = mid + 1,
-                .gt => right = mid,
-                .eq => {
-                    // Found a match, but there might be multiple versions.
-                    // We need to find the specific version.
-                    // Since we sorted by key, version_start, we can scan around.
-                    // But first, let's check if this one matches.
-                    if (version >= entry.version_start and version <= entry.version_end) {
-                        return entry;
-                    }
-
-                    // Scan backwards
-                    var i = mid;
-                    while (i > 0) {
-                        i -= 1;
-                        const prev = entries[i];
-                        if (!std.mem.eql(u8, prev.code.toSlice(), code)) break;
-                        if (version >= prev.version_start and version <= prev.version_end) return prev;
-                    }
-
-                    // Scan forwards
-                    i = mid + 1;
-                    while (i < entries.len) {
-                        const next = entries[i];
-                        if (!std.mem.eql(u8, next.code.toSlice(), code)) break;
-                        if (version >= next.version_start and version <= next.version_end) return next;
-                        i += 1;
-                    }
-
-                    return null; // Code found, but version mismatch
-                },
-            }
-        }
-        return null;
+        const Adapter = common.search.codeKey(GenderMdcEntry);
+        return common.search.versionedBinarySearch(GenderMdcEntry, []const u8, Adapter.getKey, Adapter.compare, Adapter.equal, entries, code, version);
     }
 };
 
@@ -134,22 +95,22 @@ test "GenderMdcData lookup" {
     defer data.deinit();
 
     // Test lookup
-    const e1 = data.getEntry("A001", 405);
+    const e1 = try data.getEntry("A001", 405);
     try std.testing.expect(e1 != null);
     try std.testing.expectEqual(@as(i32, 1), e1.?.male_mdc);
     try std.testing.expectEqual(@as(i32, 2), e1.?.female_mdc);
 
-    const e2 = data.getEntry("A001", 420);
+    const e2 = try data.getEntry("A001", 420);
     try std.testing.expect(e2 != null);
     try std.testing.expectEqual(@as(i32, 3), e2.?.male_mdc);
 
-    const e3 = data.getEntry("B002", 400);
+    const e3 = try data.getEntry("B002", 400);
     try std.testing.expect(e3 != null);
     try std.testing.expectEqual(@as(i32, 5), e3.?.male_mdc);
 
-    const e4 = data.getEntry("C999", 400);
+    const e4 = try data.getEntry("C999", 400);
     try std.testing.expect(e4 == null);
 
-    const e5 = data.getEntry("A001", 399); // Version mismatch
+    const e5 = try data.getEntry("A001", 399); // Version mismatch
     try std.testing.expect(e5 == null);
 }

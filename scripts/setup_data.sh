@@ -39,4 +39,7 @@ cd zig_src
 zig build
 cd "$REPO_ROOT"
 
-echo "Done. Binary data should be in data/bin/ and Zig artifacts under zig_src/zig-out/."
+echo "Packaging reference data into LMDB"
+$PYTHON scripts/package_lmdb.py
+
+echo "Done. Binary data should be in data/bin/ and LMDB at data/msdrg.mdb."

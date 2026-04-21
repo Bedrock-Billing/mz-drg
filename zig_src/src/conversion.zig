@@ -35,10 +35,29 @@ pub const ConversionData = struct {
         const header = mapped.header;
         const num_pairs = header.num_pairs;
         const entries_offset = header.entries_offset;
-        const file_size = mapped.map.memory.len;
+        const total_size = mapped.data.len;
 
-        if (entries_offset > file_size) return error.InvalidData;
-        const data_size = file_size - entries_offset;
+        if (entries_offset > total_size) return error.InvalidData;
+        const data_size = total_size - entries_offset;
+        const num_entries: u32 = @intCast(data_size / ENTRY_SIZE);
+
+        return ConversionData{
+            .mapped = mapped,
+            .num_pairs = num_pairs,
+            .entries_offset = entries_offset,
+            .num_entries = num_entries,
+        };
+    }
+
+    pub fn initWithData(data: []const u8, magic: u32) !ConversionData {
+        const mapped = try common.MappedFile(ConversionHeader).initWithData(data, magic);
+        const header = mapped.header;
+        const num_pairs = header.num_pairs;
+        const entries_offset = header.entries_offset;
+        const total_size = data.len;
+
+        if (entries_offset > total_size) return error.InvalidData;
+        const data_size = total_size - entries_offset;
         const num_entries: u32 = @intCast(data_size / ENTRY_SIZE);
 
         return ConversionData{
@@ -80,13 +99,13 @@ pub const ConversionData = struct {
     }
 
     /// Get the pair index for a given source→target year conversion.
-    fn getPairIndex(self: *const ConversionData, source_year: u32, target_year: u32) ?u16 {
-        const years_ptr: [*]const u32 = @ptrCast(@alignCast(self.mapped.base_ptr() + 12));
+    fn getPairIndex(self: *const ConversionData, source_year: u32, target_year: u32) !?u16 {
+        const years = try self.mapped.getSlice(u32, 12, self.num_pairs);
         const min_year = if (source_year < target_year) source_year else target_year;
 
         var i: usize = 0;
         while (i < self.num_pairs) : (i += 1) {
-            if (years_ptr[i] == min_year) {
+            if (years[i] == min_year) {
                 return @intCast(i);
             }
         }
@@ -147,8 +166,8 @@ pub const ConversionData = struct {
         source_code: *const [8]u8,
         source_year: u32,
         target_year: u32,
-    ) ?[8]u8 {
-        const pair_idx = self.getPairIndex(source_year, target_year) orelse return null;
+    ) !?[8]u8 {
+        const pair_idx = try self.getPairIndex(source_year, target_year) orelse return null;
         const dir = @intFromEnum(getDirection(source_year, target_year));
 
         const pair_start = self.findPairStart(pair_idx);
@@ -212,7 +231,7 @@ pub const ConversionData = struct {
             pos += 1;
         }
 
-        if (self.lookup(&code, source_year, target_year)) |target| {
+        if (try self.lookup(&code, source_year, target_year)) |target| {
             var len: usize = 0;
             while (len < 8 and target[len] != 0) : (len += 1) {}
             const result = try alloc.allocSentinel(u8, len, 0);

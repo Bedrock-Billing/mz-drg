@@ -123,20 +123,6 @@ Each entry includes:
 
 If no codes were converted, `conversions` is an empty list.
 
-### Structured API
-
-Conversion also works with `group_structured()`:
-
-```python
-with msdrg.MsdrgGrouper() as g:
-    result = g.group_structured({
-        "version": 431,
-        "source_icd_version": 2025,
-        "pdx": {"code": "B880"},
-    })
-    # result["conversions"] is populated the same way
-```
-
 ### No conversion when source matches target
 
 When `source_icd_version` equals the grouper's year, no conversion is performed:

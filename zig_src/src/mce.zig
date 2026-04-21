@@ -3,6 +3,7 @@ const mce_data = @import("mce_data.zig");
 const mce_enums = @import("mce_enums.zig");
 const mce_validation = @import("mce_validation.zig");
 const mce_editing = @import("mce_editing.zig");
+const db = @import("db.zig");
 
 const Attribute = mce_enums.Attribute;
 const EditType = mce_enums.EditType;
@@ -12,6 +13,7 @@ const MceDiagnosisCode = mce_enums.MceDiagnosisCode;
 const MceProcedureCode = mce_enums.MceProcedureCode;
 
 pub const MceComponent = struct {
+    database: db.Database,
     i10dx: mce_data.CodeMasterData,
     i10sg: mce_data.CodeMasterData,
     i9dx: mce_data.CodeMasterData,
@@ -22,59 +24,29 @@ pub const MceComponent = struct {
 
     const Self = @This();
 
-    pub fn init(data_dir: []const u8, allocator: std.mem.Allocator) !Self {
-        const sep = if (data_dir[data_dir.len - 1] == '/') "" else "/";
+    pub fn init(data_path: []const u8, allocator: std.mem.Allocator) !Self {
+        _ = allocator;
+        // Open consolidated LMDB database
+        var database = try db.Database.init(data_path);
+        errdefer database.deinit();
 
-        const i10dx_path = try std.fmt.allocPrint(allocator, "{s}{s}mce_i10dx_master.bin", .{ data_dir, sep });
-        defer allocator.free(i10dx_path);
-        const i10sg_path = try std.fmt.allocPrint(allocator, "{s}{s}mce_i10sg_master.bin", .{ data_dir, sep });
-        defer allocator.free(i10sg_path);
-        const i9dx_path = try std.fmt.allocPrint(allocator, "{s}{s}mce_i9dx_master.bin", .{ data_dir, sep });
-        defer allocator.free(i9dx_path);
-        const i9sg_path = try std.fmt.allocPrint(allocator, "{s}{s}mce_i9sg_master.bin", .{ data_dir, sep });
-        defer allocator.free(i9sg_path);
-        const age_path = try std.fmt.allocPrint(allocator, "{s}{s}mce_age_ranges.bin", .{ data_dir, sep });
-        defer allocator.free(age_path);
-        const ds_path = try std.fmt.allocPrint(allocator, "{s}{s}mce_discharge_status.bin", .{ data_dir, sep });
-        defer allocator.free(ds_path);
+        const i10dx = try mce_data.CodeMasterData.initWithData(try database.get("mce_i10dx_master"));
+        const i10sg = try mce_data.CodeMasterData.initWithData(try database.get("mce_i10sg_master"));
+        const i9dx = try mce_data.CodeMasterData.initWithData(try database.get("mce_i9dx_master"));
+        const i9sg = try mce_data.CodeMasterData.initWithData(try database.get("mce_i9sg_master"));
+        const age_ranges = try mce_data.AgeRangeData.initWithData(try database.get("mce_age_ranges"));
+        const discharge_status = try mce_data.DischargeStatusData.initWithData(try database.get("mce_discharge_status"));
 
-        var result: Self = undefined;
-
-        result.i10dx = mce_data.CodeMasterData.init(i10dx_path) catch |err| return err;
-        errdefer result.i10dx.deinit();
-        result.i10sg = mce_data.CodeMasterData.init(i10sg_path) catch |err| {
-            result.i10dx.deinit();
-            return err;
+        return Self{
+            .database = database,
+            .i10dx = i10dx,
+            .i10sg = i10sg,
+            .i9dx = i9dx,
+            .i9sg = i9sg,
+            .age_ranges = age_ranges,
+            .discharge_status = discharge_status,
+            .version = i10dx.mapped.header.termination_date,
         };
-        result.i9dx = mce_data.CodeMasterData.init(i9dx_path) catch |err| {
-            result.i10dx.deinit();
-            result.i10sg.deinit();
-            return err;
-        };
-        result.i9sg = mce_data.CodeMasterData.init(i9sg_path) catch |err| {
-            result.i10dx.deinit();
-            result.i10sg.deinit();
-            result.i9dx.deinit();
-            return err;
-        };
-        result.age_ranges = mce_data.AgeRangeData.init(age_path) catch |err| {
-            result.i10dx.deinit();
-            result.i10sg.deinit();
-            result.i9dx.deinit();
-            result.i9sg.deinit();
-            return err;
-        };
-        result.discharge_status = mce_data.DischargeStatusData.init(ds_path) catch |err| {
-            result.i10dx.deinit();
-            result.i10sg.deinit();
-            result.i9dx.deinit();
-            result.i9sg.deinit();
-            result.age_ranges.deinit();
-            return err;
-        };
-        result.version = result.i10dx.mapped.header.termination_date;
-
-        return result;
     }
 
     pub fn deinit(self: *Self) void {
@@ -84,6 +56,7 @@ pub const MceComponent = struct {
         self.i9sg.deinit();
         self.age_ranges.deinit();
         self.discharge_status.deinit();
+        self.database.deinit();
     }
 
     /// Get the diagnosis code master data (I10 by default).
@@ -99,7 +72,8 @@ pub const MceComponent = struct {
     }
 
     /// Process a claim through the MCE pipeline.
-    pub fn process(self: *Self, input: *MceInput, icd_version: u8, allocator: std.mem.Allocator) !MceOutput {
+    /// This method is thread-safe as it does not mutate MceComponent state.
+    pub fn process(self: *const Self, input: *MceInput, icd_version: u8, allocator: std.mem.Allocator) !MceOutput {
         var output = MceOutput{ .version = self.version };
         var counter = mce_editing.EditCounter{};
 
@@ -115,14 +89,14 @@ pub const MceComponent = struct {
 
         // Validate admit DX
         if (input.admit_dx) |*adx| {
-            if (!mce_validation.validateCode(adx.getCode(), dx_master, input.discharge_date)) {
+            if (!try mce_validation.validateCode(adx.getCode(), dx_master, input.discharge_date)) {
                 output.increment(mce_editing.EDIT_INVALID_ADMIT_DX);
             }
         }
 
         // Validate PDX (first diagnosis)
         if (input.pdx) |*pdx| {
-            if (!mce_validation.validateCode(pdx.getCode(), dx_master, input.discharge_date)) {
+            if (!try mce_validation.validateCode(pdx.getCode(), dx_master, input.discharge_date)) {
                 output.increment(mce_editing.EDIT_INVALID_CODE);
             }
             // Disallow blank/all-zeros PDX
@@ -143,14 +117,14 @@ pub const MceComponent = struct {
 
         // Validate SDX
         for (input.sdx.items) |*sdx| {
-            if (!mce_validation.validateCode(sdx.getCode(), dx_master, input.discharge_date)) {
+            if (!try mce_validation.validateCode(sdx.getCode(), dx_master, input.discharge_date)) {
                 output.increment(mce_editing.EDIT_INVALID_CODE);
             }
         }
 
         // Validate procedures
         for (input.procedures.items) |*proc| {
-            if (!mce_validation.validateCode(proc.getCode(), sg_master, input.discharge_date)) {
+            if (!try mce_validation.validateCode(proc.getCode(), sg_master, input.discharge_date)) {
                 output.increment(mce_editing.EDIT_INVALID_CODE);
             }
         }
@@ -166,7 +140,7 @@ pub const MceComponent = struct {
         }
 
         // Validate discharge status
-        if (!mce_validation.validateDischargeStatus(input.discharge_status, &self.discharge_status, input.discharge_date)) {
+        if (!try mce_validation.validateDischargeStatus(input.discharge_status, &self.discharge_status, input.discharge_date)) {
             output.increment(mce_editing.EDIT_INVALID_DISCHARGE_STATUS);
         }
 
@@ -180,7 +154,7 @@ pub const MceComponent = struct {
         var attr_buf: [50]Attribute = undefined;
 
         if (input.pdx) |*pdx| {
-            const count = mce_validation.loadAttributes(dx_master, pdx.getCode(), input.discharge_date, &attr_buf);
+            const count = try mce_validation.loadAttributes(dx_master, pdx.getCode(), input.discharge_date, &attr_buf);
             for (attr_buf[0..count]) |attr| {
                 try pdx.attributes.append(allocator, attr);
             }
@@ -188,21 +162,21 @@ pub const MceComponent = struct {
         }
 
         if (input.admit_dx) |*adx| {
-            const count = mce_validation.loadAttributes(dx_master, adx.getCode(), input.discharge_date, &attr_buf);
+            const count = try mce_validation.loadAttributes(dx_master, adx.getCode(), input.discharge_date, &attr_buf);
             for (attr_buf[0..count]) |attr| {
                 try adx.attributes.append(allocator, attr);
             }
         }
 
         for (input.sdx.items) |*sdx| {
-            const count = mce_validation.loadAttributes(dx_master, sdx.getCode(), input.discharge_date, &attr_buf);
+            const count = try mce_validation.loadAttributes(dx_master, sdx.getCode(), input.discharge_date, &attr_buf);
             for (attr_buf[0..count]) |attr| {
                 try sdx.attributes.append(allocator, attr);
             }
         }
 
         for (input.procedures.items) |*proc| {
-            const count = mce_validation.loadAttributes(sg_master, proc.getCode(), input.discharge_date, &attr_buf);
+            const count = try mce_validation.loadAttributes(sg_master, proc.getCode(), input.discharge_date, &attr_buf);
             for (attr_buf[0..count]) |attr| {
                 try proc.attributes.append(allocator, attr);
             }
@@ -225,7 +199,7 @@ pub const MceComponent = struct {
             if (mce_editing.doQuestionableAdmissionEdit(attrs)) |idx| try counter.incrementDx(idx, pdx, allocator);
 
             // Age conflict on PDX
-            if (mce_editing.doAgeConflictEdit(attrs, input.age, input.discharge_date, &self.age_ranges)) |result| {
+            if (try mce_editing.doAgeConflictEdit(attrs, input.age, input.discharge_date, &self.age_ranges)) |result| {
                 pdx.age_conflict_type = result.conflict_type;
                 try counter.incrementDx(result.edit, pdx, allocator);
             }
@@ -243,7 +217,7 @@ pub const MceComponent = struct {
         // Admit DX edits (age + sex only, no counter increment)
         if (input.admit_dx) |*adx| {
             const attrs = adx.attributes.items;
-            if (mce_editing.doAgeConflictEdit(attrs, input.age, input.discharge_date, &self.age_ranges)) |result| {
+            if (try mce_editing.doAgeConflictEdit(attrs, input.age, input.discharge_date, &self.age_ranges)) |result| {
                 adx.age_conflict_type = result.conflict_type;
                 try adx.addEdit(allocator, result.edit);
             }
@@ -268,7 +242,7 @@ pub const MceComponent = struct {
             if (mce_editing.doWrongProcedurePerformedEdit(attrs)) |idx| try counter.incrementDx(idx, sdx, allocator);
 
             // Age + sex conflict on SDX
-            if (mce_editing.doAgeConflictEdit(attrs, input.age, input.discharge_date, &self.age_ranges)) |result| {
+            if (try mce_editing.doAgeConflictEdit(attrs, input.age, input.discharge_date, &self.age_ranges)) |result| {
                 sdx.age_conflict_type = result.conflict_type;
                 try counter.incrementDx(result.edit, sdx, allocator);
             }
@@ -491,9 +465,9 @@ fn hasEditForIndex(edits: []const usize, target: usize) bool {
 
 test "MceComponent init/deinit" {
     const allocator = std.testing.allocator;
-    const data_dir = "../data/bin/";
+    const data_path = "../data/msdrg.mdb";
 
-    var comp = MceComponent.init(data_dir, allocator) catch |err| {
+    var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
         return;
     };
@@ -505,9 +479,9 @@ test "MceComponent init/deinit" {
 
 test "MceComponent process valid claim" {
     const allocator = std.testing.allocator;
-    const data_dir = "../data/bin/";
+    const data_path = "../data/msdrg.mdb";
 
-    var comp = MceComponent.init(data_dir, allocator) catch |err| {
+    var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
         return;
     };
@@ -531,9 +505,9 @@ test "MceComponent process valid claim" {
 
 test "MceComponent process E-code as PDX" {
     const allocator = std.testing.allocator;
-    const data_dir = "../data/bin/";
+    const data_path = "../data/msdrg.mdb";
 
-    var comp = MceComponent.init(data_dir, allocator) catch |err| {
+    var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
         return;
     };
@@ -558,9 +532,9 @@ test "MceComponent process E-code as PDX" {
 
 test "MceComponent process sex conflict" {
     const allocator = std.testing.allocator;
-    const data_dir = "../data/bin/";
+    const data_path = "../data/msdrg.mdb";
 
-    var comp = MceComponent.init(data_dir, allocator) catch |err| {
+    var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
         return;
     };
@@ -585,9 +559,9 @@ test "MceComponent process sex conflict" {
 
 test "MceComponent process age conflict" {
     const allocator = std.testing.allocator;
-    const data_dir = "../data/bin/";
+    const data_path = "../data/msdrg.mdb";
 
-    var comp = MceComponent.init(data_dir, allocator) catch |err| {
+    var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
         return;
     };
@@ -610,9 +584,9 @@ test "MceComponent process age conflict" {
 
 test "MceComponent process unacceptable PDX" {
     const allocator = std.testing.allocator;
-    const data_dir = "../data/bin/";
+    const data_path = "../data/msdrg.mdb";
 
-    var comp = MceComponent.init(data_dir, allocator) catch |err| {
+    var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
         return;
     };

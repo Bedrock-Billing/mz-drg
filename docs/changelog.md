@@ -4,6 +4,22 @@ All notable changes to this project are documented here. This project adheres to
 
 ---
 
+## v1.0.0 — 2026-04-21
+
+### Changed
+
+- :fire: **Removed legacy structured C API** — The MS-DRG grouper now exclusively uses the high-performance JSON FFI pipeline. Removed ~30 granular FFI functions (`msdrg_input_create`, `msdrg_version_create`, etc.) and the Python `group_structured()` method. This simplifies the API surface and prevents accidental use of slower, less efficient processing paths.
+- :shield: **Thread-safe MCE Component** — Refactored the Medicare Code Editor to be strictly stateless and thread-safe. A single `MceEditor` instance can now be safely shared across threads, matching the `MsdrgGrouper` behavior.
+
+### Fixed
+
+- :bug: **Fixed per-claim memory leak** — Resolved a string duplication leak in the marking phase (`marking.zig`) and an ArrayList leak in the processor chain (`chain.zig`). The entire pipeline is now 100% memory stable over millions of claims.
+
+### Performance
+
+- :rocket: **AST Formula Caching** — Implemented a thread-safe global cache for parsed DRG formulas. Evaluates formulas up to 10× faster by avoiding redundant lexing and parsing per claim.
+- **Double-Checked Locking** — Optimized the AST cache with blocking `RwLock` and double-checked locking patterns to minimize thread contention during warmup.
+
 ## v0.1.10 — 2026-04-06
 
 ### Added

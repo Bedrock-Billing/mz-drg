@@ -58,7 +58,7 @@ def compile_diagnosis():
         # Magic: 0x44494147 (DIAG)
         magic = 0x44494147
 
-        # We need to calculate offsets
+        # Calculate offsets
         # Header size: 4 (magic) + 4 (num_schemes) + 4 (num_diagnoses) + 4 (schemes_offset) + 4 (diagnoses_offset) = 20 bytes
         header_size = 20
 

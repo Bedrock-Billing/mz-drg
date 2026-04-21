@@ -367,7 +367,7 @@ pub const MsdrgMaskBuilder = struct {
 };
 
 pub const MsdrgSeverityProcessor = struct {
-    pub fn processClaimSeverity(sdx_codes: []models.DiagnosisCode, suppression_list: []const common.StringRef, base: [*]const u8) models.Severity {
+    pub fn processClaimSeverity(sdx_codes: []models.DiagnosisCode, suppression_list: []align(1) const common.StringRef, base: [*]const u8, base_len: usize) !models.Severity {
         var max_sev = models.Severity.NONE;
 
         for (sdx_codes) |*sdx| {
@@ -398,7 +398,7 @@ pub const MsdrgSeverityProcessor = struct {
             // The suppression list contains attribute names.
             // We check if the SDX has any of these attributes.
             for (suppression_list) |supp_ref| {
-                const supp_str = supp_ref.get(base);
+                const supp_str = try supp_ref.get(base, base_len);
                 for (sdx.attributes.items) |attr| {
                     if (std.mem.eql(u8, attr.list_name, supp_str)) {
                         suppressed = true;
@@ -421,19 +421,19 @@ pub const MsdrgSeverityProcessor = struct {
 pub const GroupingExecutor = struct {
     pub fn group(
         formula_data: *const formula.FormulaData,
-        data: *models.ProcessingData,
-        allocator: std.mem.Allocator,
+        context: models.ProcessingContext,
         mdc: i32,
         version: i32,
     ) !?struct { formula: formula.DrgFormula, severity: models.Severity, new_mdc: ?i32 } {
         std.log.debug("GroupingExecutor: Grouping for MDC {d}", .{mdc});
+        const data = context.data;
 
         // 1. Use pre-built mask from data
         const mask = &data.mask.?;
 
         // 2. Get Formulas for MDC
-        if (formula_data.getEntry(mdc, version)) |entry| {
-            const formulas = formula_data.getFormulas();
+        if (try formula_data.getEntry(mdc, version)) |entry| {
+            const formulas = try formula_data.getFormulas();
             const start = entry.start_index;
             const end = start + entry.count;
 
@@ -444,41 +444,32 @@ pub const GroupingExecutor = struct {
                 const drg_formula = formulas[i];
 
                 // Calculate Severity
-                const supp_list = formula_data.getSuppressionList(drg_formula.supp_offset, drg_formula.supp_count);
+                const supp_list = try formula_data.getSuppressionList(drg_formula.supp_offset, drg_formula.supp_count);
                 const base = formula_data.mapped.base_ptr();
 
-                const severity = MsdrgSeverityProcessor.processClaimSeverity(data.sdx_codes.items, supp_list, base);
+                const severity = MsdrgSeverityProcessor.processClaimSeverity(data.sdx_codes.items, supp_list, base, formula_data.mapped.data.len);
 
-                // Add severity to mask temporarily
-                const sev_str = switch (severity) {
+                // Add severity to mask temporarily.
+                // sev_str is a comptime string literal (static lifetime) — safe to use
+                // directly as a HashMap key without heap allocation.
+                const sev_str: []const u8 = switch (try severity) {
                     .MCC => "MCC",
                     .CC => "CC",
                     .NONE => "NONE",
                 };
 
-                const sev_key = try allocator.dupe(u8, sev_str);
-                try mask.put(sev_key, 0);
+                try mask.put(sev_str, 0);
 
                 // Evaluate Formula
                 const formula_str = drg_formula.getFormula(base);
                 std.log.debug("GroupingExecutor: Evaluating formula for DRG {d}: {s} (Severity: {s})", .{ drg_formula.drg, formula_str, sev_str });
 
-                var lexer = formula.Lexer.init(formula_str);
-                var tokens = try lexer.tokenize(allocator);
-                defer tokens.deinit(allocator);
-
-                var parser = formula.Parser.init(allocator, tokens.items);
-                const root = parser.parse() catch |err| {
-                    std.debug.print("Error parsing formula: {s}\n", .{formula_str});
-                    return err;
-                };
-                defer formula.Evaluator.free(root, allocator);
+                const root = try context.ast_cache.getOrParse(formula_str);
 
                 const is_match = formula.Evaluator.evaluate(root, mask, mdc);
 
-                // Remove severity from mask
-                _ = mask.remove(sev_key);
-                allocator.free(sev_key);
+                // Remove severity from mask (no free needed — key is a string literal)
+                _ = mask.remove(sev_str);
 
                 if (is_match) {
                     // Check if this is a "return code" formula (DRG 0, specific names)
@@ -494,7 +485,7 @@ pub const GroupingExecutor = struct {
                             data.final_result.drg = 999;
                             data.initial_result.mdc = 0;
                             data.final_result.mdc = 0;
-                            return .{ .formula = drg_formula, .severity = severity, .new_mdc = null };
+                            return .{ .formula = drg_formula, .severity = try severity, .new_mdc = null };
                         }
                         std.log.debug("GroupingExecutor: Matched DRG 0, ignoring...", .{});
                         continue;
@@ -511,10 +502,10 @@ pub const GroupingExecutor = struct {
                     if (mdc == 0) {
                         if (data.principal_dx) |pdx| {
                             // If MDC is 0, use MDC of the principal DX as final MDC
-                            return .{ .formula = drg_formula, .severity = severity, .new_mdc = pdx.mdc };
+                            return .{ .formula = drg_formula, .severity = try severity, .new_mdc = pdx.mdc };
                         }
                     }
-                    return .{ .formula = drg_formula, .severity = severity, .new_mdc = null };
+                    return .{ .formula = drg_formula, .severity = try severity, .new_mdc = null };
                 }
             }
         } else {
@@ -553,7 +544,7 @@ pub const MsdrgInitialPreGrouping = struct {
             }
         }
 
-        const result = try GroupingExecutor.group(self.formula_data, data, allocator, 0, self.version);
+        const result = try GroupingExecutor.group(self.formula_data, context, 0, self.version);
 
         if (result) |res| {
             // Check for return code from formula (e.g. INVALID_PDX)
@@ -616,7 +607,7 @@ pub const MsdrgInitialRerouting = struct {
             if (matched_formula.reroute_mdc_id != 0) {
                 const reroute_mdc = matched_formula.reroute_mdc_id;
 
-                const result = try GroupingExecutor.group(self.formula_data, data, allocator, reroute_mdc, self.version);
+                const result = try GroupingExecutor.group(self.formula_data, context, reroute_mdc, self.version);
 
                 if (result) |res| {
                     data.initial_result.base_drg = res.formula.base_drg;
@@ -635,7 +626,7 @@ pub const MsdrgInitialRerouting = struct {
 
                     if (res.formula.reroute_mdc_id != 0) {
                         const reroute_mdc_2 = res.formula.reroute_mdc_id;
-                        const result_2 = try GroupingExecutor.group(self.formula_data, data, allocator, reroute_mdc_2, self.version);
+                        const result_2 = try GroupingExecutor.group(self.formula_data, context, reroute_mdc_2, self.version);
                         if (result_2) |res_2| {
                             data.initial_result.base_drg = res_2.formula.base_drg;
                             data.initial_result.drg = res_2.formula.drg;
@@ -683,7 +674,7 @@ pub const MsdrgInitialPdxGrouping = struct {
 
         if (data.principal_dx) |pdx| {
             if (pdx.mdc) |mdc| {
-                const result = try GroupingExecutor.group(self.formula_data, data, allocator, mdc, self.version);
+                const result = try GroupingExecutor.group(self.formula_data, context, mdc, self.version);
 
                 if (result) |res| {
                     data.initial_result.base_drg = res.formula.base_drg;
@@ -730,14 +721,14 @@ pub const MsdrgInitialDrgResults = struct {
 
         // Fetch DRG description
         if (data.initial_result.drg) |drg| {
-            if (self.description_data.getEntry(@intCast(drg), self.version)) |entry| {
+            if (try self.description_data.getEntry(@intCast(drg), self.version)) |entry| {
                 data.initial_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr());
             }
         }
 
         // Fetch MDC description
         if (data.initial_result.mdc) |mdc| {
-            if (self.mdc_description_data.getEntry(@intCast(mdc), self.version)) |entry| {
+            if (try self.mdc_description_data.getEntry(@intCast(mdc), self.version)) |entry| {
                 data.initial_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr());
             }
         }
@@ -759,7 +750,7 @@ pub const MsdrgFinalPreGrouping = struct {
         const data = context.data;
         const allocator = context.allocator;
 
-        const result = try GroupingExecutor.group(self.formula_data, data, allocator, 0, self.version);
+        const result = try GroupingExecutor.group(self.formula_data, context, 0, self.version);
 
         if (result) |res| {
             data.final_result.base_drg = res.formula.base_drg;
@@ -808,7 +799,7 @@ pub const MsdrgFinalRerouting = struct {
             if (matched_formula.reroute_mdc_id != 0) {
                 const reroute_mdc = matched_formula.reroute_mdc_id;
 
-                const result = try GroupingExecutor.group(self.formula_data, data, allocator, reroute_mdc, self.version);
+                const result = try GroupingExecutor.group(self.formula_data, context, reroute_mdc, self.version);
 
                 if (result) |res| {
                     data.final_result.base_drg = res.formula.base_drg;
@@ -827,7 +818,7 @@ pub const MsdrgFinalRerouting = struct {
 
                     if (res.formula.reroute_mdc_id != 0) {
                         const reroute_mdc_2 = res.formula.reroute_mdc_id;
-                        const result_2 = try GroupingExecutor.group(self.formula_data, data, allocator, reroute_mdc_2, self.version);
+                        const result_2 = try GroupingExecutor.group(self.formula_data, context, reroute_mdc_2, self.version);
                         if (result_2) |res_2| {
                             data.final_result.base_drg = res_2.formula.base_drg;
                             data.final_result.drg = res_2.formula.drg;
@@ -875,7 +866,7 @@ pub const MsdrgFinalPdxGrouping = struct {
 
         if (data.principal_dx) |pdx| {
             if (pdx.mdc) |mdc| {
-                const result = try GroupingExecutor.group(self.formula_data, data, allocator, mdc, self.version);
+                const result = try GroupingExecutor.group(self.formula_data, context, mdc, self.version);
 
                 if (result) |res| {
                     data.final_result.base_drg = res.formula.base_drg;
@@ -921,14 +912,14 @@ pub const MsdrgFinalDrgResults = struct {
         // Always fetch descriptions (even if already set by another processor)
         if (data.final_result.drg) |drg| {
             if (data.final_result.drg_description == null or data.final_result.drg_description.?.len == 0) {
-                if (self.description_data.*.getEntry(@intCast(drg), self.version)) |entry| {
+                if (try self.description_data.*.getEntry(@intCast(drg), self.version)) |entry| {
                     data.final_result.drg_description = entry.getDescription(self.description_data.mapped.base_ptr());
                 }
             }
         }
         if (data.final_result.mdc) |mdc| {
             if (data.final_result.mdc_description == null or data.final_result.mdc_description.?.len == 0) {
-                if (self.mdc_description_data.*.getEntry(@intCast(mdc), self.version)) |entry| {
+                if (try self.mdc_description_data.*.getEntry(@intCast(mdc), self.version)) |entry| {
                     data.final_result.mdc_description = entry.getDescription(self.mdc_description_data.mapped.base_ptr());
                 }
             }

@@ -24,6 +24,7 @@ classifiers = [
 ]
 keywords = ["drg", "ms-drg", "grouper", "healthcare", "medicare"]
 dependencies = [
+    "lmdb>=2.2.0",
     "requests>=2.33.1",
 ]
 
@@ -48,5 +49,5 @@ include = ["msdrg*"]
 [tool.setuptools.package-data]
 msdrg = [
     "_lib/*",
-    "data/*.bin",
+    "data/*.mdb",
 ]

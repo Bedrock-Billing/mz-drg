@@ -14,6 +14,7 @@ const description = @import("description.zig");
 const gender = @import("gender.zig");
 const formula = @import("formula.zig");
 const conversion = @import("conversion.zig");
+const db = @import("db.zig");
 
 /// Chain link that builds the attribute mask once after preprocessing.
 /// Stored on ProcessingData for reuse by grouping, marking, and HAC.
@@ -30,6 +31,9 @@ const BuildMask = struct {
 };
 
 pub const GrouperChain = struct {
+    // Database
+    database: db.Database,
+
     // Data sources
     cluster_info: cluster.ClusterInfoData,
     cluster_map: cluster.ClusterMapData,
@@ -45,6 +49,7 @@ pub const GrouperChain = struct {
     hac_descriptions: hac.HacDescriptionData,
     hac_formula_data: hac.HacFormulaData,
     formula_data: formula.FormulaData,
+    ast_cache: formula.AstCache,
 
     // ICD-10 conversion tables (optional, loaded if files exist)
     cm_conversions: ?conversion.ConversionData = null,
@@ -62,80 +67,40 @@ pub const GrouperChain = struct {
     link_v430: ?chain.Link = null,
     link_v431: ?chain.Link = null,
 
-    pub fn init(allocator: std.mem.Allocator, data_dir: []const u8) !GrouperChain {
-        // Helper to join paths
-        const join = std.fs.path.join;
+    pub fn init(allocator: std.mem.Allocator, data_path: []const u8) !GrouperChain {
+        // Open consolidated LMDB database
+        var database = try db.Database.init(data_path);
+        errdefer database.deinit();
 
-        // Load all data files
-        // Note: In a real app, we might want to handle errors more gracefully or lazy load
-        // For now, we assume files exist and are valid.
-
-        const cluster_info_path = try join(allocator, &[_][]const u8{ data_dir, "cluster_info.bin" });
-        defer allocator.free(cluster_info_path);
-        const cluster_info = try cluster.ClusterInfoData.init(cluster_info_path);
-
-        const cluster_map_path = try join(allocator, &[_][]const u8{ data_dir, "cluster_map.bin" });
-        defer allocator.free(cluster_map_path);
-        const cluster_map = try cluster.ClusterMapData.init(cluster_map_path);
-
-        const pr_attr_path = try join(allocator, &[_][]const u8{ data_dir, "procedure_attributes.bin" });
-        defer allocator.free(pr_attr_path);
-        const procedure_attributes = try code_map.CodeMapData.init(pr_attr_path, 0x50524154);
-
-        const pr_patterns_path = try join(allocator, &[_][]const u8{ data_dir, "pr_patterns.bin" });
-        defer allocator.free(pr_patterns_path);
-        const pr_patterns = try pattern.PatternData.init(pr_patterns_path, 0x50525054);
-
-        const dx_data_path = try join(allocator, &[_][]const u8{ data_dir, "diagnosis.bin" });
-        defer allocator.free(dx_data_path);
-        const diagnosis_data = try diagnosis.DiagnosisData.init(dx_data_path);
-
-        const dx_patterns_path = try join(allocator, &[_][]const u8{ data_dir, "dx_patterns.bin" });
-        defer allocator.free(dx_patterns_path);
-        const dx_patterns = try pattern.PatternData.init(dx_patterns_path, 0x44585054);
-
-        const ex_ids_path = try join(allocator, &[_][]const u8{ data_dir, "exclusion_ids.bin" });
-        defer allocator.free(ex_ids_path);
-        const exclusion_ids = try code_map.CodeMapData.init(ex_ids_path, 0x45584944);
-
-        const ex_groups_path = try join(allocator, &[_][]const u8{ data_dir, "exclusion_groups.bin" });
-        defer allocator.free(ex_groups_path);
-        const exclusion_groups = try exclusion.ExclusionData.init(ex_groups_path);
-
-        const desc_path = try join(allocator, &[_][]const u8{ data_dir, "drg_descriptions.bin" });
-        defer allocator.free(desc_path);
-        const description_data = try description.DescriptionData.init(desc_path, 0x44524744); // Magic for DRGD
-
-        const mdc_desc_path = try join(allocator, &[_][]const u8{ data_dir, "mdc_descriptions.bin" });
-        defer allocator.free(mdc_desc_path);
-        const mdc_description_data = try description.DescriptionData.init(mdc_desc_path, 0x4D444344); // Magic for MDCD
-
-        const gender_path = try join(allocator, &[_][]const u8{ data_dir, "gender_mdcs.bin" });
-        defer allocator.free(gender_path);
-        const gender_mdc = try gender.GenderMdcData.init(gender_path);
-
-        const hac_desc_path = try join(allocator, &[_][]const u8{ data_dir, "hac_descriptions.bin" });
-        defer allocator.free(hac_desc_path);
-        const hac_descriptions = try hac.HacDescriptionData.init(hac_desc_path);
-
-        const hac_formula_path = try join(allocator, &[_][]const u8{ data_dir, "hac_formulas.bin" });
-        defer allocator.free(hac_formula_path);
-        const hac_formula_data = try hac.HacFormulaData.init(hac_formula_path);
-
-        const formula_path = try join(allocator, &[_][]const u8{ data_dir, "drg_formulas.bin" });
-        defer allocator.free(formula_path);
-        const formula_data = try formula.FormulaData.init(formula_path);
+        // Load all data blobs from LMDB
+        const cluster_info = try cluster.ClusterInfoData.initWithData(try database.get("cluster_info"));
+        const cluster_map = try cluster.ClusterMapData.initWithData(try database.get("cluster_map"));
+        const procedure_attributes = try code_map.CodeMapData.initWithData(try database.get("procedure_attributes"), 0x50524154);
+        const pr_patterns = try pattern.PatternData.initWithData(try database.get("pr_patterns"), 0x50525054);
+        const diagnosis_data = try diagnosis.DiagnosisData.initWithData(try database.get("diagnosis"));
+        const dx_patterns = try pattern.PatternData.initWithData(try database.get("dx_patterns"), 0x44585054);
+        const exclusion_ids = try code_map.CodeMapData.initWithData(try database.get("exclusion_ids"), 0x45584944);
+        const exclusion_groups = try exclusion.ExclusionData.initWithData(try database.get("exclusion_groups"));
+        const description_data = try description.DescriptionData.initWithData(try database.get("drg_descriptions"), 0x44524744);
+        const mdc_description_data = try description.DescriptionData.initWithData(try database.get("mdc_descriptions"), 0x4D444344);
+        const gender_mdc = try gender.GenderMdcData.initWithData(try database.get("gender_mdcs"));
+        const hac_descriptions = try hac.HacDescriptionData.initWithData(try database.get("hac_descriptions"));
+        const hac_formula_data = try hac.HacFormulaData.initWithData(try database.get("hac_formulas"));
+        const formula_data = try formula.FormulaData.initWithData(try database.get("drg_formulas"));
 
         // ICD-10 conversion tables (optional)
-        const cm_conv_path = try join(allocator, &[_][]const u8{ data_dir, "icd10cm_conversions.bin" });
-        defer allocator.free(cm_conv_path);
-        const cm_conversions = conversion.ConversionData.init(cm_conv_path, 0x49434443) catch null;
+        const cm_conversions = if (database.get("icd10cm_conversions")) |blob|
+            try conversion.ConversionData.initWithData(blob, 0x49434443)
+        else |_|
+            null;
 
-        const pcs_conv_path = try join(allocator, &[_][]const u8{ data_dir, "icd10pcs_conversions.bin" });
-        defer allocator.free(pcs_conv_path);
-        const pcs_conversions = conversion.ConversionData.init(pcs_conv_path, 0x49434450) catch null;
+        const pcs_conversions = if (database.get("icd10pcs_conversions")) |blob|
+            try conversion.ConversionData.initWithData(blob, 0x49434450)
+        else |_|
+            null;
 
-        const self = GrouperChain{
+        return GrouperChain{
+            .database = database,
             .cluster_info = cluster_info,
             .cluster_map = cluster_map,
             .procedure_attributes = procedure_attributes,
@@ -150,12 +115,11 @@ pub const GrouperChain = struct {
             .hac_descriptions = hac_descriptions,
             .hac_formula_data = hac_formula_data,
             .formula_data = formula_data,
+            .ast_cache = formula.AstCache.init(allocator),
             .cm_conversions = cm_conversions,
             .pcs_conversions = pcs_conversions,
             .allocator = allocator,
         };
-
-        return self;
     }
 
     /// Initialize pre-built Links for all supported versions.
@@ -200,10 +164,14 @@ pub const GrouperChain = struct {
         self.hac_descriptions.deinit();
         self.hac_formula_data.deinit();
         self.formula_data.deinit();
+        self.ast_cache.deinit();
 
         // Free conversion data if loaded
         if (self.cm_conversions) |*c| c.deinit();
         if (self.pcs_conversions) |*c| c.deinit();
+
+        // Close database
+        self.database.deinit();
     }
 
     /// Convert MS-DRG version number to ICD-10 fiscal year.

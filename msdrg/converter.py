@@ -6,9 +6,10 @@ to map codes forward or backward between fiscal years.
 """
 
 import ctypes
+from pathlib import Path
 from typing import TypedDict
 
-from msdrg._native import find_data_dir, get_lib
+from msdrg._native import find_data_path, get_lib
 
 
 # MS-DRG version to ICD-10 fiscal year
@@ -72,7 +73,13 @@ class IcdConverter:
         data_dir: str | None = None,
     ) -> None:
         if data_dir is None:
-            data_dir = find_data_dir()
+            data_path = find_data_path()
+        else:
+            p = Path(data_dir)
+            if p.is_dir():
+                data_path = str(p / "msdrg.mdb")
+            else:
+                data_path = data_dir
 
         self.lib = get_lib(lib_path)
 
@@ -104,10 +111,10 @@ class IcdConverter:
         self.lib.msdrg_string_free.restype = None
 
         # --- Initialize context ---
-        self.ctx = self.lib.msdrg_context_init(data_dir.encode("utf-8"))
+        self.ctx = self.lib.msdrg_context_init(data_path.encode("utf-8"))
         if not self.ctx:
             raise RuntimeError(
-                "Failed to initialize ICD converter context. Check data directory."
+                "Failed to initialize ICD converter context. Check data file."
             )
 
     def __del__(self) -> None:

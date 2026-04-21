@@ -42,7 +42,7 @@ def import_csv_to_sqlite(csv_file, cursor):
             print(f"Skipping empty file: {csv_file}")
             return
 
-        # Let's peek at the first row
+        # Peek at the first row
         first_row = None
         try:
             first_row = next(reader)

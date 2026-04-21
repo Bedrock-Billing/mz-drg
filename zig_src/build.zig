@@ -12,6 +12,10 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    exe.root_module.link_libc = true;
+    exe.root_module.addIncludePath(b.path("src/vendor/lmdb"));
+    exe.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/mdb.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
+    exe.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/midl.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
 
     b.installArtifact(exe);
 
@@ -25,7 +29,10 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    lib.is_linking_libc = true;
+    lib.root_module.link_libc = true;
+    lib.root_module.addIncludePath(b.path("src/vendor/lmdb"));
+    lib.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/mdb.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
+    lib.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/midl.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
 
     b.installArtifact(lib);
 
@@ -52,6 +59,10 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
+    unit_tests.root_module.link_libc = true;
+    unit_tests.root_module.addIncludePath(b.path("src/vendor/lmdb"));
+    unit_tests.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/mdb.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
+    unit_tests.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/midl.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

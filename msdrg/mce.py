@@ -6,10 +6,11 @@ It can be used alongside or independently of the MS-DRG grouper.
 """
 
 import ctypes
+from pathlib import Path
 from typing import Literal, TypedDict
 
 from msdrg._json import dumps as _dumps, loads as _loads
-from msdrg._native import find_data_dir, get_lib
+from msdrg._native import find_data_path, get_lib
 from msdrg._validation import validate_mce_claim
 
 
@@ -89,9 +90,12 @@ class MceEditor:
     Validates ICD codes against CMS edit rules. Can be used alongside
     ``MsdrgGrouper`` with the same claim dict.
 
+    This component is thread-safe after initialization and can be safely shared
+    across multiple threads.
+
     Args:
         lib_path: Optional path to the shared library.
-        data_dir: Optional path to the MCE data directory.
+        data_path: Optional path to the msdrg.mdb data file.
 
     Example:
         >>> claim = {
@@ -121,7 +125,13 @@ class MceEditor:
         data_dir: str | None = None,
     ) -> None:
         if data_dir is None:
-            data_dir = find_data_dir()
+            data_path = find_data_path()
+        else:
+            p = Path(data_dir)
+            if p.is_dir():
+                data_path = str(p / "msdrg.mdb")
+            else:
+                data_path = data_dir
 
         self.lib = get_lib(lib_path)
 
@@ -140,10 +150,10 @@ class MceEditor:
         self.lib.msdrg_string_free.restype = None
 
         # Initialize context
-        self.ctx = self.lib.mce_context_init(data_dir.encode("utf-8"))
+        self.ctx = self.lib.mce_context_init(data_path.encode("utf-8"))
         if not self.ctx:
             raise RuntimeError(
-                "Failed to initialize MCE context. Check data directory."
+                "Failed to initialize MCE context. Check data file."
             )
 
     def __del__(self) -> None:

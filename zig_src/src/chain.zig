@@ -1,5 +1,6 @@
 const std = @import("std");
 const models = @import("models.zig");
+const formula = @import("formula.zig");
 
 pub const LinkResult = struct {
     context: models.ProcessingContext,
@@ -34,11 +35,14 @@ pub fn compose(first: Link, second: Link, allocator: std.mem.Allocator) !Link {
 
         pub fn execute(ptr: *anyopaque, context: models.ProcessingContext) !LinkResult {
             const self = @as(*@This(), @ptrCast(@alignCast(ptr)));
-            const result = try self.first.execute(context);
+            var result = try self.first.execute(context);
             if (!result.continue_processing) {
                 return result;
             }
-            return self.second.execute(result.context);
+            return self.second.execute(result.context) catch |err| {
+                result.context.deinit();
+                return err;
+            };
         }
 
         pub fn deinit(ptr: *anyopaque, alloc: std.mem.Allocator) void {
@@ -108,7 +112,10 @@ test "chain basic usage" {
     var data = models.ProcessingData.init(allocator);
     defer data.deinit();
 
-    const context = models.ProcessingContext.init(allocator, &data, .{});
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+
+    const context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     // context is initially empty, so no allocation yet.
     // If execute succeeds, it returns a new context with allocations.
     // If execute fails, context is still empty (no leak).

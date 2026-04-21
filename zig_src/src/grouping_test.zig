@@ -99,7 +99,9 @@ test "MsdrgInitialPreGrouping logic" {
     data.principal_dx = try models.DiagnosisCode.init("P001", 'Y');
     try data.principal_dx.?.attributes.append(allocator, models.Attribute{ .list_name = "AGE>65" });
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 3. Execute Processor
@@ -235,7 +237,9 @@ test "MsdrgInitialRerouting logic" {
     data.principal_dx = try models.DiagnosisCode.init("P001", 'Y');
     try data.principal_dx.?.attributes.append(allocator, models.Attribute{ .list_name = "AGE>65" });
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 3. Execute PreGrouping (MDC 0)
@@ -364,7 +368,9 @@ test "MsdrgInitialPdxGrouping logic" {
     data.principal_dx = try models.DiagnosisCode.init("P001", 'Y');
     data.principal_dx.?.mdc = 5;
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 3. Execute PreGrouping (MDC 0) - Should fail
@@ -425,7 +431,9 @@ test "MsdrgInitialDrgResults logic" {
         defer data.deinit();
         data.initial_result.drg = 100;
 
-        var context = models.ProcessingContext.init(allocator, &data);
+        var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
         defer context.deinit();
 
         var results_step = grouping.MsdrgInitialDrgResults{
@@ -443,7 +451,9 @@ test "MsdrgInitialDrgResults logic" {
         defer data.deinit();
         // drg is null by default
 
-        var context = models.ProcessingContext.init(allocator, &data);
+        var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
         defer context.deinit();
 
         var results_step = grouping.MsdrgInitialDrgResults{

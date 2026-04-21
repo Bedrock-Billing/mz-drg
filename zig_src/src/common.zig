@@ -1,4 +1,5 @@
 const std = @import("std");
+pub const search = @import("search.zig");
 
 pub const Code = extern struct {
     value: [8]u8,
@@ -14,16 +15,18 @@ pub const StringRef = extern struct {
     offset: u32,
     len: u32,
 
-    pub fn get(self: *const StringRef, base: [*]const u8) []const u8 {
+    pub fn get(self: *align(1) const StringRef, base: [*]const u8, base_len: usize) ![]const u8 {
+        if (@as(u64, self.offset) + @as(u64, self.len) > @as(u64, base_len)) return error.DataTooShort;
         return base[self.offset .. self.offset + self.len];
     }
 };
 
 pub fn MappedFile(comptime HeaderType: type) type {
     return struct {
-        map: std.Io.File.MemoryMap,
-        header: *const HeaderType,
-        threaded: std.Io.Threaded,
+        data: []const u8,
+        header: HeaderType,
+        map: ?std.Io.File.MemoryMap = null,
+        threaded: ?std.Io.Threaded = null,
 
         const Self = @This();
 
@@ -34,7 +37,7 @@ pub fn MappedFile(comptime HeaderType: type) type {
             errdefer threaded.deinit();
 
             const file = try std.Io.Dir.openFile(std.Io.Dir.cwd(), io, path, .{});
-            errdefer std.Io.File.close(file, io);
+            defer std.Io.File.close(file, io);
 
             const file_size = try std.Io.File.length(file, io);
             var map = try std.Io.File.MemoryMap.create(io, file, .{
@@ -43,26 +46,60 @@ pub fn MappedFile(comptime HeaderType: type) type {
             });
             errdefer map.destroy(io);
 
-            const header: *const HeaderType = @ptrCast(@alignCast(map.memory.ptr));
+            if (map.memory.len < @sizeOf(HeaderType)) return error.DataTooShort;
+            var header: HeaderType = undefined;
+            @memcpy(std.mem.asBytes(&header), map.memory[0..@sizeOf(HeaderType)]);
+
             if (header.magic != magic) {
                 std.debug.print("Expected magic {x}, got {x}\n", .{ magic, header.magic });
                 return error.InvalidMagic;
             }
 
             return Self{
-                .map = map,
+                .data = map.memory,
                 .header = header,
+                .map = map,
                 .threaded = threaded,
             };
         }
 
+        pub fn initWithData(data: []const u8, magic: u32) !Self {
+            if (data.len < @sizeOf(HeaderType)) return error.DataTooShort;
+
+            var header: HeaderType = undefined;
+            @memcpy(std.mem.asBytes(&header), data[0..@sizeOf(HeaderType)]);
+
+            if (header.magic != magic) {
+                std.debug.print("Expected magic {x}, got {x}\n", .{ magic, header.magic });
+                return error.InvalidMagic;
+            }
+
+            return Self{
+                .data = data,
+                .header = header,
+                .map = null,
+                .threaded = null,
+            };
+        }
+
         pub fn deinit(self: *Self) void {
-            self.map.destroy(self.threaded.io());
-            self.threaded.deinit();
+            if (self.map) |*m| {
+                m.destroy(self.threaded.?.io());
+                self.threaded.?.deinit();
+            }
         }
 
         pub fn base_ptr(self: *const Self) [*]const u8 {
-            return self.map.memory.ptr;
+            return self.data.ptr;
+        }
+
+        /// Returns a typed slice into the mapped data at the given byte offset and element count.
+        /// Returns error.DataTooShort if the requested range exceeds the mapped data bounds.
+        pub fn getSlice(self: *const Self, comptime T: type, offset: usize, count: usize) ![]align(1) const T {
+            const end = offset + (count * @sizeOf(T));
+            if (end > self.data.len) return error.DataTooShort;
+            const bytes = self.data[offset..end];
+            return @as([*]align(1) const T, @ptrCast(bytes.ptr))[0..count];
         }
     };
 }

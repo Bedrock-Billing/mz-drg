@@ -34,53 +34,23 @@ pub const HacDescriptionData = struct {
         return HacDescriptionData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !HacDescriptionData {
+        const mapped = try common.MappedFile(HacDescriptionHeader).initWithData(data, 0x48414344);
+        return HacDescriptionData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *HacDescriptionData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const HacDescriptionData) []const HacDescriptionEntry {
-        const entries_ptr = @as([*]const HacDescriptionEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return entries_ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const HacDescriptionData) ![]align(1) const HacDescriptionEntry {
+        return try self.mapped.getSlice(HacDescriptionEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
-    pub fn getEntry(self: *const HacDescriptionData, id: u16, version: i32) ?HacDescriptionEntry {
-        const entries = self.getEntries();
-        var left: usize = 0;
-        var right: usize = entries.len;
-
-        while (left < right) {
-            const mid = left + (right - left) / 2;
-            const entry = entries[mid];
-
-            if (entry.id < id) {
-                left = mid + 1;
-            } else if (entry.id > id) {
-                right = mid;
-            } else {
-                // Found match, check version
-                if (version >= entry.version_start and version <= entry.version_end) {
-                    return entry;
-                }
-                // Scan backwards
-                var i = mid;
-                while (i > 0) {
-                    i -= 1;
-                    const prev = entries[i];
-                    if (prev.id != id) break;
-                    if (version >= prev.version_start and version <= prev.version_end) return prev;
-                }
-                // Scan forwards
-                i = mid + 1;
-                while (i < entries.len) {
-                    const next = entries[i];
-                    if (next.id != id) break;
-                    if (version >= next.version_start and version <= next.version_end) return next;
-                    i += 1;
-                }
-                return null;
-            }
-        }
-        return null;
+    pub fn getEntry(self: *const HacDescriptionData, id: u16, version: i32) !?HacDescriptionEntry {
+        const entries = try self.getEntries();
+        const Adapter = common.search.intKey(HacDescriptionEntry, u16, "id");
+        return common.search.versionedBinarySearch(HacDescriptionEntry, u16, Adapter.getKey, Adapter.compare, Adapter.equal, entries, id, version);
     }
 };
 
@@ -109,138 +79,39 @@ pub const HacFormulaData = struct {
         return HacFormulaData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !HacFormulaData {
+        const mapped = try common.MappedFile(HacFormulaHeader).initWithData(data, 0x48414346);
+        return HacFormulaData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *HacFormulaData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const HacFormulaData) []const HacFormulaEntry {
-        const entries_ptr = @as([*]const HacFormulaEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return entries_ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const HacFormulaData) ![]align(1) const HacFormulaEntry {
+        return try self.mapped.getSlice(HacFormulaEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
-    pub fn getEntry(self: *const HacFormulaData, id: u16, version: i32) ?HacFormulaEntry {
-        const entries = self.getEntries();
-        var left: usize = 0;
-        var right: usize = entries.len;
-
-        while (left < right) {
-            const mid = left + (right - left) / 2;
-            const entry = entries[mid];
-
-            if (entry.id < id) {
-                left = mid + 1;
-            } else if (entry.id > id) {
-                right = mid;
-            } else {
-                // Found match, check version
-                if (version >= entry.version_start and version <= entry.version_end) {
-                    return entry;
-                }
-                // Scan backwards
-                var i = mid;
-                while (i > 0) {
-                    i -= 1;
-                    const prev = entries[i];
-                    if (prev.id != id) break;
-                    if (version >= prev.version_start and version <= prev.version_end) return prev;
-                }
-                // Scan forwards
-                i = mid + 1;
-                while (i < entries.len) {
-                    const next = entries[i];
-                    if (next.id != id) break;
-                    if (version >= next.version_start and version <= next.version_end) return next;
-                    i += 1;
-                }
-                return null;
-            }
-        }
-        return null;
+    pub fn getFormulas(self: *const HacFormulaData, entry: HacFormulaEntry) ![]align(1) const common.StringRef {
+        return self.getOperands(entry);
     }
 
-    pub fn getFormulas(self: *const HacFormulaData, entry: HacFormulaEntry) []const common.StringRef {
-        const list_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr() + entry.list_offset)));
-        return list_ptr[0..entry.count];
+    pub fn getEntry(self: *const HacFormulaData, id: u16, version: i32) !?HacFormulaEntry {
+        const entries = try self.getEntries();
+        const Adapter = common.search.intKey(HacFormulaEntry, u16, "id");
+        return common.search.versionedBinarySearch(HacFormulaEntry, u16, Adapter.getKey, Adapter.compare, Adapter.equal, entries, id, version);
+    }
+
+    pub fn getOperands(self: *const HacFormulaData, entry: HacFormulaEntry) ![]align(1) const common.StringRef {
+        return try self.mapped.getSlice(common.StringRef, entry.list_offset, entry.count);
     }
 };
 
-// --- HAC Operands ---
-pub const HacOperandHeader = extern struct {
-    magic: u32,
-    num_entries: u32,
-    entries_offset: u32,
-    list_data_offset: u32,
-};
-
-pub const HacOperandEntry = extern struct {
-    code: common.Code,
-    version_start: i32,
-    version_end: i32,
-    list_offset: u32,
-    count: u32,
-};
-
-pub const HacOperandData = struct {
-    mapped: common.MappedFile(HacOperandHeader),
-
-    pub fn init(path: []const u8) !HacOperandData {
-        const mapped = try common.MappedFile(HacOperandHeader).init(path, 0x4841434F);
-        return HacOperandData{ .mapped = mapped };
-    }
-
-    pub fn deinit(self: *HacOperandData) void {
-        self.mapped.deinit();
-    }
-
-    pub fn getEntries(self: *const HacOperandData) []const HacOperandEntry {
-        const entries_ptr = @as([*]const HacOperandEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return entries_ptr[0..self.mapped.header.num_entries];
-    }
-
-    pub fn getEntry(self: *const HacOperandData, code: []const u8, version: i32) ?HacOperandEntry {
-        const entries = self.getEntries();
-        var left: usize = 0;
-        var right: usize = entries.len;
-
-        while (left < right) {
-            const mid = left + (right - left) / 2;
-            const entry = entries[mid];
-            const entry_code = entry.code.toSlice();
-
-            const order = std.mem.order(u8, entry_code, code);
-            switch (order) {
-                .lt => left = mid + 1,
-                .gt => right = mid,
-                .eq => {
-                    if (version >= entry.version_start and version <= entry.version_end) {
-                        return entry;
-                    }
-                    var i = mid;
-                    while (i > 0) {
-                        i -= 1;
-                        const prev = entries[i];
-                        if (!std.mem.eql(u8, prev.code.toSlice(), code)) break;
-                        if (version >= prev.version_start and version <= prev.version_end) return prev;
-                    }
-                    i = mid + 1;
-                    while (i < entries.len) {
-                        const next = entries[i];
-                        if (!std.mem.eql(u8, next.code.toSlice(), code)) break;
-                        if (version >= next.version_start and version <= next.version_end) return next;
-                        i += 1;
-                    }
-                    return null;
-                },
-            }
-        }
-        return null;
-    }
-
-    pub fn getHacs(self: *const HacOperandData, entry: HacOperandEntry) []const u8 {
-        const list_ptr = self.mapped.base_ptr() + entry.list_offset;
-        return list_ptr[0..entry.count];
-    }
-};
+// NOTE: HAC operand data (hac_operands.bin) is NOT used by the grouping pipeline.
+// HAC attributes are loaded through the diagnosis scheme's hac_operand_pattern field,
+// which resolves via dx_patterns in preprocess.zig (PdxAttributeProcessor / SdxAttributeProcessor).
+// Binary analysis confirmed equivalence: dx_patterns yields the same HAC attribute names
+// and numbers as the standalone hac_operands table. See LMDB migration review for details.
 
 test "HacData lookup" {
     const filename = "test_hac.bin";
@@ -296,15 +167,15 @@ test "HacData lookup" {
     var desc_data = try HacDescriptionData.init(filename);
     defer desc_data.deinit();
 
-    const d1 = desc_data.getEntry(1, 405);
+    const d1 = try desc_data.getEntry(1, 405);
     try std.testing.expect(d1 != null);
     try std.testing.expectEqual(@as(u16, 1), d1.?.id);
 
-    const d2 = desc_data.getEntry(2, 420);
+    const d2 = try desc_data.getEntry(2, 420);
     try std.testing.expect(d2 != null);
     try std.testing.expectEqual(@as(u16, 2), d2.?.id);
 
-    const d3 = desc_data.getEntry(1, 420); // Version mismatch
+    const d3 = try desc_data.getEntry(1, 420); // Version mismatch
     try std.testing.expect(d3 == null);
 }
 
@@ -338,7 +209,7 @@ pub const MsdrgHacProcessor = struct {
         }
 
         // NON_EXEMPT or UNKNOWN — process HACs
-        try self.processHospitalAcquiredCondition(data, hospital_status, allocator);
+        try self.processHospitalAcquiredCondition(context, hospital_status);
 
         // Rebuild mask after HAC modifications to SDX codes
         data.deinitMask();
@@ -358,7 +229,9 @@ pub const MsdrgHacProcessor = struct {
         };
     }
 
-    fn processHospitalAcquiredCondition(self: *const MsdrgHacProcessor, data: *models.ProcessingData, hospital_status: models.HospitalStatusOptionFlag, allocator: std.mem.Allocator) !void {
+    fn processHospitalAcquiredCondition(self: *const MsdrgHacProcessor, context: models.ProcessingContext, hospital_status: models.HospitalStatusOptionFlag) !void {
+        const data = context.data;
+        const allocator = context.allocator;
         var codes_with_hacs = std.AutoHashMap(i32, std.ArrayList(*models.DiagnosisCode)).init(allocator);
         defer {
             var it = codes_with_hacs.valueIterator();
@@ -386,7 +259,7 @@ pub const MsdrgHacProcessor = struct {
                     continue;
                 }
 
-                const status = try self.evaluateHacConditions(data, hac, allocator);
+                const status = try self.evaluateHacConditions(context, hac);
                 hac.hac_status = status;
                 sdx.poa_error_code_flag = getPoaErrorCode(sdx.poa);
 
@@ -542,29 +415,20 @@ pub const MsdrgHacProcessor = struct {
         try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
     }
 
-    fn evaluateHacConditions(self: *const MsdrgHacProcessor, data: *models.ProcessingData, hac: *models.Hac, allocator: std.mem.Allocator) !models.HacUsage {
+    fn evaluateHacConditions(self: *const MsdrgHacProcessor, context: models.ProcessingContext, hac: *models.Hac) !models.HacUsage {
         var hac_status = models.HacUsage.HAC_CRITERIA_NOT_MET;
 
         // Use pre-built mask
-        const mask = &data.mask.?;
+        const mask = &context.data.mask.?;
 
-        if (self.formula_data.getEntry(@intCast(hac.hac_number), self.version)) |entry| {
-            const formulas = self.formula_data.getFormulas(entry);
+        if (try self.formula_data.getEntry(@intCast(hac.hac_number), self.version)) |entry| {
+            const formulas = try self.formula_data.getFormulas(entry);
             const base = self.formula_data.mapped.base_ptr();
 
             for (formulas) |f_ref| {
-                const formula_str = f_ref.get(base);
+                const formula_str = try f_ref.get(base, self.formula_data.mapped.data.len);
 
-                var lexer = formula.Lexer.init(formula_str);
-                var tokens = try lexer.tokenize(allocator);
-                defer tokens.deinit(allocator);
-
-                var parser = formula.Parser.init(allocator, tokens.items);
-                const root = parser.parse() catch |err| {
-                    std.debug.print("Error parsing HAC formula: {s}\n", .{formula_str});
-                    return err;
-                };
-                defer formula.Evaluator.free(root, allocator);
+                const root = try context.ast_cache.getOrParse(formula_str);
 
                 if (formula.Evaluator.evaluate(root, mask, 0)) {
                     hac_status = .HAC_CRITERIA_MET;
@@ -759,7 +623,10 @@ test "MsdrgHacProcessor execution" {
     data.mask = try grouping.MsdrgMaskBuilder.buildMask(&data, allocator);
 
     // 4. Execute
-    try processor.processHospitalAcquiredCondition(&data, .NOT_EXEMPT, allocator);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    const context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
+    try processor.processHospitalAcquiredCondition(context, .NOT_EXEMPT);
 
     // 5. Verify
     const processed_dx = &data.sdx_codes.items[0];

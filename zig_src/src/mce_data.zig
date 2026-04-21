@@ -29,14 +29,14 @@ pub const CodeMasterEntry = extern struct {
     flags_count: u16,
     _pad: [2]u8 = [_]u8{0} ** 2,
 
-    pub fn getCode(self: *const CodeMasterEntry) []const u8 {
+    pub fn getCode(self: *align(1) const CodeMasterEntry) []const u8 {
         var len: usize = 0;
         while (len < 8 and self.code[len] != 0) : (len += 1) {}
         return self.code[0..len];
     }
 
     /// Check if a date falls within this entry's valid range.
-    pub fn isActive(self: *const CodeMasterEntry, date: i32) bool {
+    pub fn isActive(self: *align(1) const CodeMasterEntry, date: i32) bool {
         return date >= self.date_start and date <= self.date_end;
     }
 
@@ -57,7 +57,7 @@ pub const FlagIterator = struct {
     offset: usize,
     remaining: u16,
 
-    pub fn init(entry: *const CodeMasterEntry, strings_base: [*]const u8) FlagIterator {
+    pub fn init(entry: *align(1) const CodeMasterEntry, strings_base: [*]const u8) FlagIterator {
         return FlagIterator{
             .strings_base = strings_base,
             .offset = entry.flags_offset,
@@ -85,27 +85,31 @@ pub const CodeMasterData = struct {
         return CodeMasterData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !CodeMasterData {
+        const mapped = try common.MappedFile(CodeMasterHeader).initWithData(data, CODE_MASTER_MAGIC);
+        return CodeMasterData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *CodeMasterData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const CodeMasterData) []const CodeMasterEntry {
-        const ptr = @as([*]const CodeMasterEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const CodeMasterData) ![]align(1) const CodeMasterEntry {
+        return try self.mapped.getSlice(CodeMasterEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
     pub fn getStringBlock(self: *const CodeMasterData) [*]const u8 {
         return self.mapped.base_ptr() + self.mapped.header.strings_offset;
     }
 
-    pub fn flagIterator(self: *const CodeMasterData, entry: *const CodeMasterEntry) FlagIterator {
+    pub fn flagIterator(self: *const CodeMasterData, entry: *align(1) const CodeMasterEntry) FlagIterator {
         return FlagIterator.init(entry, self.getStringBlock());
     }
 
     /// Binary search for a code. Returns the first matching entry or null.
     /// Multiple entries may exist for the same code with different date ranges.
-    pub fn lookup(self: *const CodeMasterData, code: []const u8) ?*const CodeMasterEntry {
-        const entries = self.getEntries();
+    pub fn lookup(self: *const CodeMasterData, code: []const u8) !?*align(1) const CodeMasterEntry {
+        const entries = try self.getEntries();
         var left: usize = 0;
         var right: usize = entries.len;
 
@@ -133,8 +137,8 @@ pub const CodeMasterData = struct {
 
     /// Find all entries for a given code that are active on the given date.
     /// Returns a slice of entries (up to `max_results`).
-    pub fn lookupActive(self: *const CodeMasterData, code: []const u8, date: i32, results: []?*const CodeMasterEntry) usize {
-        const entries = self.getEntries();
+    pub fn lookupActive(self: *const CodeMasterData, code: []const u8, date: i32, results: []?*align(1) const CodeMasterEntry) !usize {
+        const entries = try self.getEntries();
 
         // Find first entry with this code
         var left: usize = 0;
@@ -178,14 +182,14 @@ pub const CodeMasterData = struct {
     }
 
     /// Check if a code exists in the table (any date range).
-    pub fn hasCode(self: *const CodeMasterData, code: []const u8) bool {
-        return self.lookup(code) != null;
+    pub fn hasCode(self: *const CodeMasterData, code: []const u8) !bool {
+        return try self.lookup(code) != null;
     }
 
     /// Check if a code has a specific flag active on a given date.
-    pub fn hasFlag(self: *const CodeMasterData, code: []const u8, flag: []const u8, date: i32) bool {
-        var buf: [4]?*const CodeMasterEntry = .{ null, null, null, null };
-        const count = self.lookupActive(code, date, &buf);
+    pub fn hasFlag(self: *const CodeMasterData, code: []const u8, flag: []const u8, date: i32) !bool {
+        var buf: [4]?*align(1) const CodeMasterEntry = .{ null, null, null, null };
+        const count = try self.lookupActive(code, date, &buf);
 
         const strings = self.getStringBlock();
         for (0..count) |i| {
@@ -239,13 +243,17 @@ pub const AgeRangeData = struct {
         return AgeRangeData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !AgeRangeData {
+        const mapped = try common.MappedFile(AgeRangeHeader).initWithData(data, AGE_RANGE_MAGIC);
+        return AgeRangeData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *AgeRangeData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const AgeRangeData) []const AgeRangeEntry {
-        const ptr = @as([*]const AgeRangeEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const AgeRangeData) ![]align(1) const AgeRangeEntry {
+        return try self.mapped.getSlice(AgeRangeEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
     pub fn getStringBlock(self: *const AgeRangeData) [*]const u8 {
@@ -253,8 +261,8 @@ pub const AgeRangeData = struct {
     }
 
     /// Check if an age is within a named age group for a given date.
-    pub fn isAgeInGroup(self: *const AgeRangeData, age: i32, group: []const u8, date: i32) bool {
-        const entries = self.getEntries();
+    pub fn isAgeInGroup(self: *const AgeRangeData, age: i32, group: []const u8, date: i32) !bool {
+        const entries = try self.getEntries();
         const strings = self.getStringBlock();
 
         for (entries) |entry| {
@@ -268,8 +276,8 @@ pub const AgeRangeData = struct {
     }
 
     /// Get all age groups that contain the given age on the given date.
-    pub fn getMatchingGroups(self: *const AgeRangeData, age: i32, date: i32, results: [][]const u8) usize {
-        const entries = self.getEntries();
+    pub fn getMatchingGroups(self: *const AgeRangeData, age: i32, date: i32, results: [][]const u8) !usize {
+        const entries = try self.getEntries();
         const strings = self.getStringBlock();
         var count: usize = 0;
 
@@ -298,7 +306,7 @@ pub const DischargeStatusEntry = extern struct {
     date_start: i32,
     date_end: i32,
 
-    pub fn isActive(self: *const DischargeStatusEntry, date: i32) bool {
+    pub fn isActive(self: *align(1) const DischargeStatusEntry, date: i32) bool {
         return date >= self.date_start and date <= self.date_end;
     }
 };
@@ -311,18 +319,22 @@ pub const DischargeStatusData = struct {
         return DischargeStatusData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !DischargeStatusData {
+        const mapped = try common.MappedFile(DischargeStatusHeader).initWithData(data, DISCHARGE_MAGIC);
+        return DischargeStatusData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *DischargeStatusData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const DischargeStatusData) []const DischargeStatusEntry {
-        const ptr = @as([*]const DischargeStatusEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const DischargeStatusData) ![]align(1) const DischargeStatusEntry {
+        return try self.mapped.getSlice(DischargeStatusEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
     /// Check if a discharge status code is valid for a given date.
-    pub fn isValid(self: *const DischargeStatusData, code: i32, date: i32) bool {
-        const entries = self.getEntries();
+    pub fn isValid(self: *const DischargeStatusData, code: i32, date: i32) !bool {
+        const entries = try self.getEntries();
 
         // Binary search (entries are sorted by code)
         var left: usize = 0;
@@ -423,15 +435,15 @@ test "CodeMasterData real file lookup" {
     try std.testing.expect(dx_data.mapped.header.num_entries > 80000);
 
     // Lookup code I5020 (Heart Failure)
-    const entry = dx_data.lookup("I5020").?;
+    const entry = (try dx_data.lookup("I5020")).?;
     try std.testing.expectEqualStrings("I5020", entry.getCode());
     try std.testing.expect(entry.isActive(20250101));
 
     // Lookup nonexistent code
-    try std.testing.expect(dx_data.lookup("ZZZZZ") == null);
+    try std.testing.expect(try dx_data.lookup("ZZZZZ") == null);
 
     // Check flag on a code with flags (Z9989 has "unacceptable")
-    const z_entry = dx_data.lookup("Z9989").?;
+    const z_entry = (try dx_data.lookup("Z9989")).?;
     try std.testing.expectEqualStrings("Z9989", z_entry.getCode());
     try std.testing.expectEqual(@as(u16, 1), z_entry.flags_count);
 
@@ -439,11 +451,11 @@ test "CodeMasterData real file lookup" {
     const z_flag = z_iter.next().?;
     try std.testing.expectEqualStrings("unacceptable", z_flag);
 
-    try std.testing.expect(dx_data.hasFlag("Z9989", "unacceptable", 20250101));
-    try std.testing.expect(!dx_data.hasFlag("Z9989", "male", 20250101));
+    try std.testing.expect(try dx_data.hasFlag("Z9989", "unacceptable", 20250101));
+    try std.testing.expect(!try dx_data.hasFlag("Z9989", "male", 20250101));
 
     // A000 has no flags
-    try std.testing.expect(!dx_data.hasFlag("A000", "male", 20250101));
+    try std.testing.expect(!try dx_data.hasFlag("A000", "male", 20250101));
 }
 
 test "AgeRangeData real file" {
@@ -460,18 +472,18 @@ test "AgeRangeData real file" {
     try std.testing.expectEqual(@as(u32, 5), age_data.mapped.header.num_entries);
 
     // Age 0 is newborn and pediatric
-    try std.testing.expect(age_data.isAgeInGroup(0, "Newborn", 20250101));
-    try std.testing.expect(age_data.isAgeInGroup(0, "Pediatric", 20250101));
-    try std.testing.expect(!age_data.isAgeInGroup(0, "Adult", 20250101));
+    try std.testing.expect(try age_data.isAgeInGroup(0, "Newborn", 20250101));
+    try std.testing.expect(try age_data.isAgeInGroup(0, "Pediatric", 20250101));
+    try std.testing.expect(!try age_data.isAgeInGroup(0, "Adult", 20250101));
 
     // Age 30 is adult only
-    try std.testing.expect(age_data.isAgeInGroup(30, "Adult", 20250101));
-    try std.testing.expect(!age_data.isAgeInGroup(30, "Pediatric", 20250101));
-    try std.testing.expect(!age_data.isAgeInGroup(30, "Newborn", 20250101));
+    try std.testing.expect(try age_data.isAgeInGroup(30, "Adult", 20250101));
+    try std.testing.expect(!try age_data.isAgeInGroup(30, "Pediatric", 20250101));
+    try std.testing.expect(!try age_data.isAgeInGroup(30, "Newborn", 20250101));
 
     // Age 25 is adult and maternity
-    try std.testing.expect(age_data.isAgeInGroup(25, "Adult", 20250101));
-    try std.testing.expect(age_data.isAgeInGroup(25, "Maternity", 20250101));
+    try std.testing.expect(try age_data.isAgeInGroup(25, "Adult", 20250101));
+    try std.testing.expect(try age_data.isAgeInGroup(25, "Maternity", 20250101));
 }
 
 test "DischargeStatusData real file" {
@@ -488,12 +500,12 @@ test "DischargeStatusData real file" {
     try std.testing.expectEqual(@as(u32, 45), ds_data.mapped.header.num_entries);
 
     // Valid codes
-    try std.testing.expect(ds_data.isValid(1, 20250101)); // Home/Self Care
-    try std.testing.expect(ds_data.isValid(20, 20250101)); // Died
-    try std.testing.expect(ds_data.isValid(30, 20250101)); // Still a Patient
+    try std.testing.expect(try ds_data.isValid(1, 20250101)); // Home/Self Care
+    try std.testing.expect(try ds_data.isValid(20, 20250101)); // Died
+    try std.testing.expect(try ds_data.isValid(30, 20250101)); // Still a Patient
 
     // Invalid codes
-    try std.testing.expect(!ds_data.isValid(99, 20250101));
-    try std.testing.expect(!ds_data.isValid(0, 20250101));
-    try std.testing.expect(!ds_data.isValid(-1, 20250101));
+    try std.testing.expect(!try ds_data.isValid(99, 20250101));
+    try std.testing.expect(!try ds_data.isValid(0, 20250101));
+    try std.testing.expect(!try ds_data.isValid(-1, 20250101));
 }

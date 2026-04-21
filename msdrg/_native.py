@@ -105,29 +105,29 @@ def find_library() -> str:
     )
 
 
-def find_data_dir() -> str:
+def find_data_path() -> str:
     """
-    Find the data directory within the installed package.
+    Find the LMDB data file within the installed package.
 
-    Both the MS-DRG grouper and MCE editor use the same data files.
+    Both the MS-DRG grouper and MCE editor use the same data file.
 
     Search order:
-    1. Package's data/ directory (installed package)
-    2. Repository data/bin/ directory (development mode)
+    1. Package's data/msdrg.mdb (installed package)
+    2. Repository data/msdrg.mdb (development mode)
     """
     pkg_dir = _get_package_dir()
 
-    data_path = pkg_dir / "data"
-    if data_path.exists() and any(data_path.iterdir()):
-        return str(data_path)
+    data_file = (pkg_dir / "data" / "msdrg.mdb").absolute()
+    if data_file.exists():
+        return str(data_file)
 
-    dev_path = pkg_dir.parent / "data" / "bin"
-    if dev_path.exists():
-        return str(dev_path)
+    dev_file = (pkg_dir.parent / "data" / "msdrg.mdb").absolute()
+    if dev_file.exists():
+        return str(dev_file)
 
     raise FileNotFoundError(
-        f"Could not find data directory. Searched:\n"
-        f"  - {pkg_dir / 'data'}\n"
-        f"  - {dev_path}\n"
+        f"Could not find msdrg.mdb. Searched:\n"
+        f"  - {data_file}\n"
+        f"  - {dev_file}\n"
         f"Make sure the package is installed correctly."
     )

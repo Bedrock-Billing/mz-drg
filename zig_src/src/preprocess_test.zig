@@ -11,7 +11,7 @@ const hac = @import("hac.zig");
 const description = @import("description.zig");
 
 // Mock Data Structures
-// We need to create mock versions of the data structures used by the processors.
+// Create mock versions of the data structures used by the processors.
 // Since the processors take pointers to the data structs, we can create
 // dummy structs with the same layout or use the real structs pointing to
 // temporary files created for the test. Using temporary files is safer
@@ -102,7 +102,9 @@ test "MsdrgExclusions logic" {
     try data.sdx_codes.append(allocator, try models.DiagnosisCode.init("B002", 'Y'));
     try data.sdx_codes.append(allocator, try models.DiagnosisCode.init("C003", 'Y'));
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 3. Execute Processor
@@ -283,7 +285,9 @@ test "PdxAttributeProcessor logic" {
     data.principal_dx = try models.DiagnosisCode.init("A001", 'Y');
     data.sex = .FEMALE; // Should pick MDC 6
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 3. Execute Processor
@@ -440,7 +444,9 @@ test "SdxAttributeProcessor logic" {
     defer data.deinit();
     try data.sdx_codes.append(allocator, try models.DiagnosisCode.init("B002", 'Y'));
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 3. Execute Processor

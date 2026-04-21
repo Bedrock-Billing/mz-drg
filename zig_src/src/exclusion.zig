@@ -20,17 +20,25 @@ pub const ExclusionData = struct {
         return ExclusionData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !ExclusionData {
+        const mapped = try common.MappedFile(DataHeader).initWithData(data, 0x4D534452);
+        return ExclusionData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *ExclusionData) void {
         self.mapped.deinit();
     }
 
-    pub fn getGroups(self: *const ExclusionData) []const ExclusionGroupIndex {
-        const index_ptr = @as([*]const ExclusionGroupIndex, @ptrCast(@alignCast(self.mapped.base_ptr() + @sizeOf(DataHeader))));
-        return index_ptr[0..self.mapped.header.num_groups];
+    pub fn getIndices(self: *const ExclusionData) ![]align(1) const ExclusionGroupIndex {
+        return try self.mapped.getSlice(ExclusionGroupIndex, @sizeOf(DataHeader), self.mapped.header.num_groups);
     }
 
-    pub fn getGroup(self: *const ExclusionData, key: i32) ?ExclusionGroupIndex {
-        const groups = self.getGroups();
+    pub fn getGroups(self: *const ExclusionData) ![]align(1) const ExclusionGroupIndex {
+        return try self.getIndices();
+    }
+
+    pub fn getGroup(self: *const ExclusionData, key: i32) !?ExclusionGroupIndex {
+        const groups = try self.getGroups();
         var left: usize = 0;
         var right: usize = groups.len;
 
@@ -49,9 +57,8 @@ pub const ExclusionData = struct {
         return null;
     }
 
-    pub fn getCodes(self: *const ExclusionData, group: ExclusionGroupIndex) []const common.Code {
-        const codes_ptr = @as([*]const common.Code, @ptrCast(@alignCast(self.mapped.base_ptr() + group.code_offset)));
-        return codes_ptr[0..group.code_count];
+    pub fn getCodes(self: *const ExclusionData, group: ExclusionGroupIndex) ![]align(1) const common.Code {
+        return try self.mapped.getSlice(common.Code, group.code_offset, group.code_count);
     }
 };
 
@@ -119,19 +126,19 @@ test "ExclusionData lookup" {
     var data = try ExclusionData.init(filename);
     defer data.deinit();
 
-    const g1 = data.getGroup(10);
+    const g1 = try data.getGroup(10);
     try std.testing.expect(g1 != null);
     try std.testing.expectEqual(@as(i32, 10), g1.?.key);
     try std.testing.expectEqual(@as(u32, 1), g1.?.code_count);
 
-    const codes1 = data.getCodes(g1.?);
+    const codes1 = try data.getCodes(g1.?);
     try std.testing.expectEqual(@as(usize, 1), codes1.len);
     try std.testing.expect(std.mem.eql(u8, codes1[0].toSlice(), "A001"));
 
-    const g2 = data.getGroup(20);
+    const g2 = try data.getGroup(20);
     try std.testing.expect(g2 != null);
     try std.testing.expectEqual(@as(i32, 20), g2.?.key);
 
-    const g3 = data.getGroup(99);
+    const g3 = try data.getGroup(99);
     try std.testing.expect(g3 == null);
 }

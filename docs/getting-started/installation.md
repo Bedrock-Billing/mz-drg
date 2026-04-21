@@ -49,7 +49,7 @@ pip install -e .
 
 ```bash
 python -c "import msdrg; print(msdrg.__version__)"
-# Expected: 0.1.3 (or current version)
+# Expected: 1.0.0
 ```
 
 ```python
@@ -76,4 +76,4 @@ python -c "import msdrg; print(msdrg.__version__)"
     ```
 
 ??? question "Data directory not found"
-    The binary data files should be bundled with the package. If installing in development mode (`pip install -e .`), verify that `data/bin/` exists and contains `.bin` files.
+    The binary data files should be bundled with the package. If installing in development mode (`pip install -e .`), verify that `data/` exists and contains the `msdrg.mdb` database.

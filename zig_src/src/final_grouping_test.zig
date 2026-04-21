@@ -95,7 +95,9 @@ test "MsdrgFinalPreGrouping logic" {
     sdx.severity = .MCC;
     try data.sdx_codes.append(allocator, sdx);
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 3. Execute FinalPreGrouping
@@ -145,7 +147,9 @@ test "MsdrgFinalDrgResults logic" {
         defer data.deinit();
         data.final_result.drg = 100;
 
-        var context = models.ProcessingContext.init(allocator, &data);
+        var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
         defer context.deinit();
 
         var results_step = grouping.MsdrgFinalDrgResults{
@@ -163,7 +167,9 @@ test "MsdrgFinalDrgResults logic" {
         defer data.deinit();
         // drg is null by default
 
-        var context = models.ProcessingContext.init(allocator, &data);
+        var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
         defer context.deinit();
 
         var results_step = grouping.MsdrgFinalDrgResults{

@@ -96,7 +96,7 @@ def compile_table(table_name, output_filename, magic):
         # Write List Data
         # The list data contains StringRefs (offset, len).
         # The offsets are currently relative to string pool start.
-        # We need to make them absolute (strings_offset + rel_offset).
+        # Make them absolute (strings_offset + rel_offset).
 
         for i in range(0, len(list_data), 8):
             rel_off, length = struct.unpack("<II", list_data[i : i + 8])

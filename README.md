@@ -313,7 +313,7 @@ The MCE implementation is validated against the CMS Java MCE 2.0 v43.1 with a 10
 │  → Final DRG   Counts                                        │
 │    │           │                 │                           │
 │    ▼           ▼                 ▼                           │
-│  Memory-mapped .bin files (24 total)                        │
+│  Memory-mapped LMDB database (msdrg.mdb)                    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -395,33 +395,6 @@ const char* result = msdrg_group_json(ctx, "{\"version\":431,...}");
 msdrg_string_free(result);
 msdrg_context_free(ctx);
 ```
-
-### Structured API (no JSON — fine-grained control)
-
-```c
-#include "msdrg.h"
-
-MsdrgContext ctx = msdrg_context_init("/path/to/data/bin");
-MsdrgVersion ver = msdrg_version_create(ctx, 431);
-MsdrgInput inp = msdrg_input_create();
-
-msdrg_input_set_pdx(inp, "I5020", 'Y');
-msdrg_input_add_sdx(inp, "E1165", 'Y');
-msdrg_input_set_demographics(inp, 65, 0, 1);
-msdrg_input_set_source_icd_year(inp, 2025);  // Optional: auto-convert codes
-
-MsdrgResult res = msdrg_group(ver, inp);
-int32_t drg = msdrg_result_get_final_drg(res);
-int32_t mdc = msdrg_result_get_final_mdc(res);
-const char* desc = msdrg_result_get_final_drg_description(res);
-
-msdrg_result_free(res);
-msdrg_input_free(inp);
-msdrg_version_free(ver);
-msdrg_context_free(ctx);
-```
-
-The structured API gives C/C++/Rust callers direct access to all 47 result fields without JSON parsing overhead. For Python, the JSON API (`group()`) is faster due to fewer FFI crossings. See `zig-out/include/msdrg.h` for the full function reference.
 
 ### MCE Editor
 

@@ -34,7 +34,7 @@ pub fn validateCode(
     code: []const u8,
     master: *const mce_data.CodeMasterData,
     date: i32,
-) bool {
+) !bool {
     if (code.len == 0) return true;
     var all_zeros = true;
     for (code) |c| {
@@ -45,8 +45,8 @@ pub fn validateCode(
     }
     if (all_zeros) return true;
 
-    var buf: [1]?*const mce_data.CodeMasterEntry = .{null};
-    return master.lookupActive(code, date, &buf) > 0;
+    var buf: [1]?*align(1) const mce_data.CodeMasterEntry = .{null};
+    return try master.lookupActive(code, date, &buf) > 0;
 }
 
 pub fn validateSex(sex: i32, date: i32) bool {
@@ -60,8 +60,8 @@ pub fn validateDischargeStatus(
     status: i32,
     discharge_status_data: *const mce_data.DischargeStatusData,
     date: i32,
-) bool {
-    return discharge_status_data.isValid(status, date);
+) !bool {
+    return try discharge_status_data.isValid(status, date);
 }
 
 pub fn validateAge(age: i32) bool {
@@ -75,9 +75,9 @@ pub fn loadAttributes(
     code: []const u8,
     date: i32,
     result: []mce_enums.Attribute,
-) usize {
-    var buf: [1]?*const mce_data.CodeMasterEntry = .{null};
-    if (master.lookupActive(code, date, &buf) == 0) return 0;
+) !usize {
+    var buf: [1]?*align(1) const mce_data.CodeMasterEntry = .{null};
+    if (try master.lookupActive(code, date, &buf) == 0) return 0;
     const entry = buf[0].?;
 
     var iter = mce_data.FlagIterator.init(entry, master.getStringBlock());
@@ -97,8 +97,8 @@ pub fn hasAttribute(
     code: []const u8,
     attr: mce_enums.Attribute,
     date: i32,
-) bool {
-    return master.hasFlag(code, attr.flagString(), date);
+) !bool {
+    return try master.hasFlag(code, attr.flagString(), date);
 }
 
 // --- Tests ---
@@ -143,24 +143,24 @@ test "validateCode real file" {
     defer dx_data.deinit();
 
     // Empty code is "valid"
-    try std.testing.expect(validateCode("", &dx_data, 20250101));
+    try std.testing.expect(try validateCode("", &dx_data, 20250101));
 
     // All zeros is "valid"
-    try std.testing.expect(validateCode("0000", &dx_data, 20250101));
+    try std.testing.expect(try validateCode("0000", &dx_data, 20250101));
 
     // Real code is valid
-    try std.testing.expect(validateCode("I5020", &dx_data, 20250101));
+    try std.testing.expect(try validateCode("I5020", &dx_data, 20250101));
 
     // Fake codes are not valid
-    try std.testing.expect(!validateCode("ZZZZZ", &dx_data, 20250101));
-    try std.testing.expect(!validateCode("ZZZZZZZ", &dx_data, 20250101));
-    try std.testing.expect(!validateCode("Z@4481", &dx_data, 20250101));
+    try std.testing.expect(!try validateCode("ZZZZZ", &dx_data, 20250101));
+    try std.testing.expect(!try validateCode("ZZZZZZZ", &dx_data, 20250101));
+    try std.testing.expect(!try validateCode("Z@4481", &dx_data, 20250101));
 
     // Verify with SG master too
     var sg_data = mce_data.CodeMasterData.init(data_dir ++ "mce_i10sg_master.bin") catch return;
     defer sg_data.deinit();
-    try std.testing.expect(!validateCode("ZZZZZZZ", &sg_data, 20250101));
-    try std.testing.expect(!validateCode("Z@4481", &sg_data, 20250101));
+    try std.testing.expect(!try validateCode("ZZZZZZZ", &sg_data, 20250101));
+    try std.testing.expect(!try validateCode("Z@4481", &sg_data, 20250101));
 }
 
 test "loadAttributes real file" {
@@ -169,7 +169,7 @@ test "loadAttributes real file" {
     defer dx_data.deinit();
 
     var result: [10]mce_enums.Attribute = undefined;
-    const count = loadAttributes(&dx_data, "Z9989", 20250101, &result);
+    const count = try loadAttributes(&dx_data, "Z9989", 20250101, &result);
     try std.testing.expect(count >= 1);
 
     var found_unacceptable = false;
@@ -178,7 +178,7 @@ test "loadAttributes real file" {
     }
     try std.testing.expect(found_unacceptable);
 
-    const count2 = loadAttributes(&dx_data, "A000", 20250101, &result);
+    const count2 = try loadAttributes(&dx_data, "A000", 20250101, &result);
     try std.testing.expectEqual(@as(usize, 0), count2);
 }
 
@@ -187,7 +187,7 @@ test "validateDischargeStatus real file" {
     var ds_data = mce_data.DischargeStatusData.init(data_dir ++ "mce_discharge_status.bin") catch return;
     defer ds_data.deinit();
 
-    try std.testing.expect(validateDischargeStatus(1, &ds_data, 20250101));
-    try std.testing.expect(validateDischargeStatus(20, &ds_data, 20250101));
-    try std.testing.expect(!validateDischargeStatus(99, &ds_data, 20250101));
+    try std.testing.expect(try validateDischargeStatus(1, &ds_data, 20250101));
+    try std.testing.expect(try validateDischargeStatus(20, &ds_data, 20250101));
+    try std.testing.expect(!try validateDischargeStatus(99, &ds_data, 20250101));
 }

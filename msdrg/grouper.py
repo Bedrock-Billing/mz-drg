@@ -7,10 +7,11 @@ Zig shared library via ctypes.
 
 import ctypes
 import copy
+from pathlib import Path
 from typing import Literal, TypedDict
 
 from msdrg._json import dumps as _dumps, loads as _loads
-from msdrg._native import find_data_dir, get_lib
+from msdrg._native import find_data_path, get_lib
 from msdrg._validation import validate_claim
 
 
@@ -226,7 +227,15 @@ class MsdrgGrouper:
         data_dir: str | None = None,
     ) -> None:
         if data_dir is None:
-            data_dir = find_data_dir()
+            data_path = find_data_path()
+        else:
+            # For backward compatibility, if data_dir is provided, use it.
+            # It could be a directory containing msdrg.mdb or the file itself.
+            p = Path(data_dir)
+            if p.is_dir():
+                data_path = str(p / "msdrg.mdb")
+            else:
+                data_path = data_dir
 
         self.lib = get_lib(lib_path)
         self._version_cache: dict[int, int] = {}
@@ -238,69 +247,7 @@ class MsdrgGrouper:
         self.lib.msdrg_context_free.argtypes = [ctypes.c_void_p]
         self.lib.msdrg_context_free.restype = None
 
-        # --- Version ---
-        self.lib.msdrg_version_create.argtypes = [ctypes.c_void_p, ctypes.c_int32]
-        self.lib.msdrg_version_create.restype = ctypes.c_void_p
-
-        self.lib.msdrg_version_free.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_version_free.restype = None
-
-        # --- Input ---
-        self.lib.msdrg_input_create.argtypes = []
-        self.lib.msdrg_input_create.restype = ctypes.c_void_p
-
-        self.lib.msdrg_input_free.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_input_free.restype = None
-
-        self.lib.msdrg_input_set_pdx.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_char_p,
-            ctypes.c_uint8,
-        ]
-        self.lib.msdrg_input_set_pdx.restype = ctypes.c_bool
-
-        self.lib.msdrg_input_set_admit_dx.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_char_p,
-            ctypes.c_uint8,
-        ]
-        self.lib.msdrg_input_set_admit_dx.restype = ctypes.c_bool
-
-        self.lib.msdrg_input_add_sdx.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_char_p,
-            ctypes.c_uint8,
-        ]
-        self.lib.msdrg_input_add_sdx.restype = ctypes.c_bool
-
-        self.lib.msdrg_input_add_procedure.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-        self.lib.msdrg_input_add_procedure.restype = ctypes.c_bool
-
-        self.lib.msdrg_input_set_demographics.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-            ctypes.c_int32,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_input_set_demographics.restype = None
-
-        self.lib.msdrg_input_set_hospital_status.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_input_set_hospital_status.restype = None
-
-        self.lib.msdrg_input_set_tie_breaker.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_input_set_tie_breaker.restype = None
-
-        # --- Grouping (structured) ---
-        self.lib.msdrg_group.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
-        self.lib.msdrg_group.restype = ctypes.c_void_p
-
-        # --- Grouping (JSON — backward compat) ---
+        # --- Grouping (JSON) ---
         self.lib.msdrg_group_json.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
         self.lib.msdrg_group_json.restype = ctypes.c_void_p
 
@@ -324,123 +271,11 @@ class MsdrgGrouper:
         ]
         self.lib.msdrg_convert_pr.restype = ctypes.c_void_p
 
-        # --- Result ---
-        self.lib.msdrg_result_free.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_free.restype = None
-
-        # Scalar result getters
-        self.lib.msdrg_result_get_initial_drg.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_initial_drg.restype = ctypes.c_int32
-
-        self.lib.msdrg_result_get_final_drg.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_final_drg.restype = ctypes.c_int32
-
-        self.lib.msdrg_result_get_initial_mdc.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_initial_mdc.restype = ctypes.c_int32
-
-        self.lib.msdrg_result_get_final_mdc.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_final_mdc.restype = ctypes.c_int32
-
-        self.lib.msdrg_result_get_return_code_name.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_return_code_name.restype = ctypes.c_void_p
-
-        # Description getters
-        self.lib.msdrg_result_get_initial_drg_description.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_initial_drg_description.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_final_drg_description.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_final_drg_description.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_initial_mdc_description.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_initial_mdc_description.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_final_mdc_description.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_final_mdc_description.restype = ctypes.c_void_p
-
-        # PDX output getters
-        self.lib.msdrg_result_has_pdx.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_has_pdx.restype = ctypes.c_bool
-
-        self.lib.msdrg_result_get_pdx_code.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_pdx_code.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_pdx_mdc.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_pdx_mdc.restype = ctypes.c_int32
-
-        self.lib.msdrg_result_get_pdx_severity.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_pdx_severity.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_pdx_drg_impact.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_pdx_drg_impact.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_pdx_poa_error.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_pdx_poa_error.restype = ctypes.c_void_p
-
-        # SDX output getters
-        self.lib.msdrg_result_get_sdx_count.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_sdx_count.restype = ctypes.c_int32
-
-        self.lib.msdrg_result_get_sdx_code.argtypes = [ctypes.c_void_p, ctypes.c_int32]
-        self.lib.msdrg_result_get_sdx_code.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_sdx_mdc.argtypes = [ctypes.c_void_p, ctypes.c_int32]
-        self.lib.msdrg_result_get_sdx_mdc.restype = ctypes.c_int32
-
-        self.lib.msdrg_result_get_sdx_severity.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_result_get_sdx_severity.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_sdx_drg_impact.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_result_get_sdx_drg_impact.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_sdx_poa_error.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_result_get_sdx_poa_error.restype = ctypes.c_void_p
-
-        # Proc output getters
-        self.lib.msdrg_result_get_proc_count.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_proc_count.restype = ctypes.c_int32
-
-        self.lib.msdrg_result_get_proc_code.argtypes = [ctypes.c_void_p, ctypes.c_int32]
-        self.lib.msdrg_result_get_proc_code.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_proc_is_or.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_result_get_proc_is_or.restype = ctypes.c_bool
-
-        self.lib.msdrg_result_get_proc_drg_impact.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_result_get_proc_drg_impact.restype = ctypes.c_void_p
-
-        # Flag getters
-        self.lib.msdrg_result_get_pdx_flags.argtypes = [ctypes.c_void_p]
-        self.lib.msdrg_result_get_pdx_flags.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_sdx_flags.argtypes = [ctypes.c_void_p, ctypes.c_int32]
-        self.lib.msdrg_result_get_sdx_flags.restype = ctypes.c_void_p
-
-        self.lib.msdrg_result_get_proc_flags.argtypes = [
-            ctypes.c_void_p,
-            ctypes.c_int32,
-        ]
-        self.lib.msdrg_result_get_proc_flags.restype = ctypes.c_void_p
-
         # --- Initialize context ---
-        self.ctx = self.lib.msdrg_context_init(data_dir.encode("utf-8"))
+        self.ctx = self.lib.msdrg_context_init(data_path.encode("utf-8"))
         if not self.ctx:
             raise RuntimeError(
-                "Failed to initialize MS-DRG context. Check data directory."
+                "Failed to initialize MS-DRG context. Check data file."
             )
 
     def __del__(self) -> None:
@@ -489,189 +324,6 @@ class MsdrgGrouper:
 
     def __exit__(self, *args: object) -> None:
         self.close()
-
-    def _get_version(self, version: int) -> int:
-        """Get or create a cached version handle."""
-        if version not in self._version_cache:
-            ver_ptr = self.lib.msdrg_version_create(self.ctx, version)
-            if not ver_ptr:
-                raise RuntimeError(
-                    f"Unsupported version: {version}. "
-                    f"Supported: {', '.join(str(v) for v in self.available_versions())}"
-                )
-            self._version_cache[version] = ver_ptr
-        return self._version_cache[version]
-
-    def _cstr(self, ptr: int) -> str | None:
-        """Read a C string pointer, returning None for empty strings."""
-        if not ptr:
-            return None
-        value = ctypes.cast(ptr, ctypes.c_char_p).value
-        if value is None:
-            return None
-        s = value.decode("utf-8")
-        return s if s else None
-
-    def _build_input(self, claim_data: ClaimInput) -> int:
-        """Create a MsdrgInput handle from a claim dict. Caller must free."""
-        inp = self.lib.msdrg_input_create()
-        if not inp:
-            raise RuntimeError("Failed to create native input handle")
-        try:
-            # Demographics
-            self.lib.msdrg_input_set_demographics(
-                inp,
-                claim_data.get("age", 0),
-                claim_data.get("sex", 2),
-                claim_data.get("discharge_status", 0),
-            )
-
-            # Hospital status
-            hs = claim_data.get("hospital_status")
-            if hs is not None:
-                self.lib.msdrg_input_set_hospital_status(
-                    inp, _HOSPITAL_STATUS_MAP.get(hs, 1)
-                )
-
-            # Tie breaker
-            tb = claim_data.get("tie_breaker")
-            if tb is not None:
-                self.lib.msdrg_input_set_tie_breaker(inp, _TIE_BREAKER_MAP.get(tb, 0))
-
-            # PDX
-            pdx = claim_data.get("pdx")
-            if pdx:
-                if not self.lib.msdrg_input_set_pdx(
-                    inp, pdx["code"].encode("utf-8"), _poa_byte(pdx.get("poa"))
-                ):
-                    raise ValueError(f"Invalid PDX code: {pdx['code']}")
-
-            # Admit DX
-            admit_dx = claim_data.get("admit_dx")
-            if admit_dx:
-                if not self.lib.msdrg_input_set_admit_dx(
-                    inp,
-                    admit_dx["code"].encode("utf-8"),
-                    _poa_byte(admit_dx.get("poa")),
-                ):
-                    raise ValueError(f"Invalid admit DX code: {admit_dx['code']}")
-
-            # Secondary diagnoses
-            for sdx in claim_data.get("sdx", []):
-                if not self.lib.msdrg_input_add_sdx(
-                    inp, sdx["code"].encode("utf-8"), _poa_byte(sdx.get("poa"))
-                ):
-                    raise ValueError(f"Invalid SDX code: {sdx['code']}")
-
-            # Procedures
-            for proc in claim_data.get("procedures", []):
-                if not self.lib.msdrg_input_add_procedure(
-                    inp, proc["code"].encode("utf-8")
-                ):
-                    raise ValueError(f"Invalid procedure code: {proc['code']}")
-
-            return inp
-        except Exception:
-            self.lib.msdrg_input_free(inp)
-            raise
-
-    def _read_result(self, result_ptr: int) -> GroupResult:
-        """Read all fields from a MsdrgResult handle into a GroupResult dict."""
-        lib = self.lib
-
-        def _parse_flags(ptr: int) -> list[str]:
-            """Parse comma-separated flags string into a list."""
-            s = self._cstr(ptr)
-            if not s:
-                return []
-            return s.split(",")
-
-        # PDX output
-        pdx_output: DiagnosisOutput | None = None
-        if lib.msdrg_result_has_pdx(result_ptr):
-            pdx_output = {
-                "code": self._cstr(lib.msdrg_result_get_pdx_code(result_ptr)) or "",
-                "mdc": lib.msdrg_result_get_pdx_mdc(result_ptr),
-                "severity": self._cstr(lib.msdrg_result_get_pdx_severity(result_ptr))
-                or "",
-                "drg_impact": self._cstr(
-                    lib.msdrg_result_get_pdx_drg_impact(result_ptr)
-                )
-                or "",
-                "poa_error": self._cstr(lib.msdrg_result_get_pdx_poa_error(result_ptr))
-                or "",
-                "flags": _parse_flags(lib.msdrg_result_get_pdx_flags(result_ptr)),
-            }
-            # MDC of -1 means None
-            if pdx_output["mdc"] == -1:
-                pdx_output["mdc"] = None
-
-        # SDX output
-        sdx_count = lib.msdrg_result_get_sdx_count(result_ptr)
-        sdx_output: list[DiagnosisOutput] = []
-        for i in range(sdx_count):
-            entry: DiagnosisOutput = {
-                "code": self._cstr(lib.msdrg_result_get_sdx_code(result_ptr, i)) or "",
-                "mdc": lib.msdrg_result_get_sdx_mdc(result_ptr, i),
-                "severity": self._cstr(lib.msdrg_result_get_sdx_severity(result_ptr, i))
-                or "",
-                "drg_impact": self._cstr(
-                    lib.msdrg_result_get_sdx_drg_impact(result_ptr, i)
-                )
-                or "",
-                "poa_error": self._cstr(
-                    lib.msdrg_result_get_sdx_poa_error(result_ptr, i)
-                )
-                or "",
-                "flags": _parse_flags(lib.msdrg_result_get_sdx_flags(result_ptr, i)),
-            }
-            if entry["mdc"] == -1:
-                entry["mdc"] = None
-            sdx_output.append(entry)
-
-        # Proc output
-        proc_count = lib.msdrg_result_get_proc_count(result_ptr)
-        proc_output: list[ProcedureOutput] = []
-        for i in range(proc_count):
-            proc_entry: ProcedureOutput = {
-                "code": self._cstr(lib.msdrg_result_get_proc_code(result_ptr, i)) or "",
-                "is_or": lib.msdrg_result_get_proc_is_or(result_ptr, i),
-                "drg_impact": self._cstr(
-                    lib.msdrg_result_get_proc_drg_impact(result_ptr, i)
-                )
-                or "",
-                "flags": _parse_flags(lib.msdrg_result_get_proc_flags(result_ptr, i)),
-            }
-            proc_output.append(proc_entry)
-
-        initial_drg = lib.msdrg_result_get_initial_drg(result_ptr)
-        final_drg = lib.msdrg_result_get_final_drg(result_ptr)
-        initial_mdc = lib.msdrg_result_get_initial_mdc(result_ptr)
-        final_mdc = lib.msdrg_result_get_final_mdc(result_ptr)
-
-        return {
-            "initial_drg": initial_drg if initial_drg != -1 else None,
-            "final_drg": final_drg if final_drg != -1 else None,
-            "initial_mdc": initial_mdc if initial_mdc != -1 else None,
-            "final_mdc": final_mdc if final_mdc != -1 else None,
-            "initial_drg_description": self._cstr(
-                lib.msdrg_result_get_initial_drg_description(result_ptr)
-            ),
-            "final_drg_description": self._cstr(
-                lib.msdrg_result_get_final_drg_description(result_ptr)
-            ),
-            "initial_mdc_description": self._cstr(
-                lib.msdrg_result_get_initial_mdc_description(result_ptr)
-            ),
-            "final_mdc_description": self._cstr(
-                lib.msdrg_result_get_final_mdc_description(result_ptr)
-            ),
-            "return_code": self._cstr(lib.msdrg_result_get_return_code_name(result_ptr))
-            or "OK",
-            "pdx_output": pdx_output,
-            "sdx_output": sdx_output,
-            "proc_output": proc_output,
-        }
 
     def _convert_code(
         self, code: str, source_year: int, target_year: int, is_dx: bool
@@ -802,59 +454,6 @@ class MsdrgGrouper:
             return result
         finally:
             self.lib.msdrg_string_free(result_ptr)
-
-    def group_structured(self, claim_data: ClaimInput) -> GroupResult:
-        """
-        Group a claim using the structured C API (individual getter/setter calls).
-
-        This avoids JSON serialization but makes ~30 FFI calls per claim.
-        Use ``group()`` for bulk processing (it's faster due to fewer FFI
-        crossings). Use this when you need fine-grained control or want to
-        avoid JSON parsing on the Zig side.
-
-        Args:
-            claim_data: Claim dictionary matching the ``ClaimInput`` schema.
-
-        Returns:
-            A ``GroupResult`` dictionary identical in shape to ``group()``.
-        """
-        if not self.ctx:
-            raise RuntimeError("MsdrgGrouper has been closed. Create a new instance.")
-
-        validate_claim(claim_data)
-
-        # Convert codes if source_icd_version is set
-        claim_data, conversions = self._maybe_convert_claim(claim_data)
-
-        version = claim_data.get("version")
-        if version is None:
-            raise ValueError("Claim must include 'version'")
-
-        ver_ptr = self._get_version(version)
-        inp = self._build_input(claim_data)
-
-        try:
-            result_ptr = self.lib.msdrg_group(ver_ptr, inp)
-
-            if not result_ptr:
-                pdx = claim_data.get("pdx", {})
-                pdx_code = pdx.get("code", "?") if isinstance(pdx, dict) else "?"
-                raise RuntimeError(
-                    f"Grouping failed (returned null). "
-                    f"version={version}, pdx='{pdx_code}'. "
-                    f"Check that the version is supported "
-                    f"({', '.join(str(v) for v in self.available_versions())}) "
-                    f"and the PDX code is a valid ICD-10-CM code."
-                )
-
-            try:
-                result = self._read_result(result_ptr)
-                result["conversions"] = conversions
-                return result
-            finally:
-                self.lib.msdrg_result_free(result_ptr)
-        finally:
-            self.lib.msdrg_input_free(inp)
 
 
 # ---------------------------------------------------------------------------

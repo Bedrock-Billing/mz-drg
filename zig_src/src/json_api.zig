@@ -156,7 +156,7 @@ fn mapProcedureOutput(arena: std.mem.Allocator, proc: models.ProcedureCode) !Pro
 /// Memory: The caller owns the returned slice and must free it with the
 /// same allocator passed as `root_allocator`. All intermediate allocations
 /// are scoped to an internal arena that is freed before return.
-pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdrg.GrouperChain, json_str: []const u8) ![]u8 {
+pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdrg.GrouperChain, json_str: []const u8) ![:0]u8 {
     // Arena for all intermediate allocations — freed in one shot.
     // This prevents leaks on partial failure (e.g. mapDiagnosisOutput
     // succeeds but the append after it fails).
@@ -202,7 +202,7 @@ pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdr
         .poa_reporting_exempt = parseHospitalStatus(input.hospital_status),
         .tie_breaker = parseTieBreaker(input.tie_breaker),
     };
-    const context = models.ProcessingContext.init(root_allocator, &data, runtime_options);
+    const context = models.ProcessingContext.init(root_allocator, &data, runtime_options, @constCast(&grouper_chain.ast_cache));
     const result = try link.execute(context);
     var final_ctx = result.context;
     defer final_ctx.deinit();
@@ -266,7 +266,60 @@ pub fn processJson(root_allocator: std.mem.Allocator, grouper_chain: *const msdr
     try write_stream.write(output);
 
     // Copy the final JSON string out of the arena so it survives arena free
-    const json_bytes = try out.toOwnedSlice();
-    const owned = try root_allocator.dupe(u8, json_bytes);
-    return owned;
+    const json_bytes = root_allocator.dupeSentinel(u8, out.written(), 0);
+    return json_bytes;
+}
+
+test "processJson memory leak check" {
+    const allocator = std.testing.allocator;
+
+    var grouper_chain = msdrg.GrouperChain.init(allocator, "../data/msdrg.mdb") catch |err| {
+        std.debug.print("Failed to initialize GrouperChain: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    defer grouper_chain.deinit();
+    try grouper_chain.initLinks();
+
+    // Use an input that triggers multiple SDX and Procedure codes and different length strings
+    const json_str =
+        \\{
+        \\    "version": 400,
+        \\    "age": 65,
+        \\    "sex": 0,
+        \\    "discharge_status": 1,
+        \\    "pdx": {"code": "I10"},
+        \\    "sdx": [
+        \\        {"code": "A000", "poa": "Y"},
+        \\        {"code": "E0841", "poa": "N"},
+        \\        {"code": "K219", "poa": "Y"},
+        \\        {"code": "J189", "poa": "W"}
+        \\    ],
+        \\    "procedures": [
+        \\        {"code": "001607B"},
+        \\        {"code": "0210093"},
+        \\        {"code": "047K04Z"}
+        \\    ]
+        \\}
+    ;
+
+    for (0..500) |_| {
+        const result_json = try processJson(allocator, &grouper_chain, json_str);
+        allocator.free(result_json);
+    }
+
+    // Test parsing failure
+    const bad_json = "{ bad json ";
+    _ = processJson(allocator, &grouper_chain, bad_json) catch {};
+
+    // Test logical failure (unsupported version)
+    const bad_version_json =
+        \\{
+        \\    "version": 999,
+        \\    "age": 65,
+        \\    "sex": 0,
+        \\    "discharge_status": 1,
+        \\    "pdx": {"code": "I10"}
+        \\}
+    ;
+    _ = processJson(allocator, &grouper_chain, bad_version_json) catch {};
 }

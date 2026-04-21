@@ -68,3 +68,10 @@ zig-out/
 
 # Logs
 *.log
+
+# LMDB
+*.mdb-lock
+
+# IDE
+.gemini/
+.scion/

@@ -19,8 +19,8 @@ The shared library exposes a C ABI for integration with any language that suppor
 ```c
 #include <stdio.h>
 
-// Initialize context with path to binary data files
-void* ctx = msdrg_context_init("/path/to/data/bin");
+// Initialize context with path to binary data directory
+void* ctx = msdrg_context_init("/path/to/data");
 if (!ctx) {
     fprintf(stderr, "Failed to initialize grouper\n");
     return 1;
@@ -39,7 +39,7 @@ msdrg_context_free(ctx);
 
 ```c
 // Initialize MCE context (same data directory)
-void* mce = mce_context_init("/path/to/data/bin");
+void* mce = mce_context_init("/path/to/data");
 if (!mce) {
     fprintf(stderr, "Failed to initialize MCE\n");
     return 1;

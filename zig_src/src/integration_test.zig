@@ -237,7 +237,7 @@ test "Full Grouper Chain Integration" {
         defer std.Io.File.close(f, std.testing.io);
         try writeU32(f, 0x47454E44); // Magic
         try writeU32(f, 0); // Num entries
-        try writeU32(f, 16); // Entries offset
+        try writeU32(f, 12); // Entries offset
     }
     defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, gender_path) catch {};
 
@@ -248,8 +248,8 @@ test "Full Grouper Chain Integration" {
         defer std.Io.File.close(f, std.testing.io);
         try writeU32(f, 0x48414344); // Magic
         try writeU32(f, 0); // Num entries
-        try writeU32(f, 16); // Entries offset
-        try writeU32(f, 16); // Strings offset
+        try writeU32(f, 12); // Entries offset
+        try writeU32(f, 12); // Strings offset
     }
     defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, hac_desc_path) catch {};
 
@@ -260,9 +260,9 @@ test "Full Grouper Chain Integration" {
         defer std.Io.File.close(f, std.testing.io);
         try writeU32(f, 0x48414346); // Magic
         try writeU32(f, 0); // Num entries
-        try writeU32(f, 16); // Entries offset
-        try writeU32(f, 16); // List data offset
-        try writeU32(f, 16); // Strings offset
+        try writeU32(f, 20); // Entries offset (HacFormulaHeader is 5x u32 = 20 bytes)
+        try writeU32(f, 20); // List data offset
+        try writeU32(f, 20); // Strings offset
     }
     defer std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, hac_formula_path) catch {};
 
@@ -349,6 +349,7 @@ test "Full Grouper Chain Integration" {
 
     // --- 3. Create Grouper Chain ---
     var grouper_chain = msdrg.GrouperChain{
+        .database = @import("db.zig").Database.null_database,
         .cluster_info = cluster_info,
         .cluster_map = cluster_map,
         .procedure_attributes = procedure_attributes,
@@ -364,6 +365,7 @@ test "Full Grouper Chain Integration" {
         .hac_formula_data = hac_formula_data,
         .formula_data = formula_data,
         .allocator = allocator,
+        .ast_cache = formula.AstCache.init(allocator),
     };
     defer grouper_chain.deinit();
 
@@ -374,7 +376,9 @@ test "Full Grouper Chain Integration" {
     var data = models.ProcessingData.init(allocator);
     defer data.deinit();
 
-    var context = models.ProcessingContext.init(allocator, &data, .{});
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // Add Patient Data

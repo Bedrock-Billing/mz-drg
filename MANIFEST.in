@@ -4,8 +4,8 @@ include pyproject.toml
 include setup.py
 recursive-include msdrg *.py
 include msdrg/py.typed
-recursive-include msdrg/data *.bin
-recursive-include zig_src *.zig build.zig
+include msdrg/data/msdrg.mdb
+recursive-include zig_src *.zig build.zig *.c *.h
 recursive-include scripts *.py *.sh
-recursive-include data/bin *.bin
+include data/msdrg.mdb
 recursive-exclude msdrg/_lib *

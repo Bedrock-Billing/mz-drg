@@ -70,7 +70,9 @@ test "InitialDiagnosisMarking execution" {
     var data = models.ProcessingData.init(allocator);
     defer data.deinit();
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 4. Add SDX code with attribute "MCC"
@@ -79,7 +81,7 @@ test "InitialDiagnosisMarking execution" {
     try data.sdx_codes.append(allocator, sdx);
 
     // 5. Set up winning formula
-    const formulas = formula_data.getFormulas();
+    const formulas = try formula_data.getFormulas();
     context.initial_grouping_context.pdx_match = formulas[0];
 
     // 6. Execute Marking
@@ -159,7 +161,9 @@ test "InitialDiagnosisMarking no match" {
     var data = models.ProcessingData.init(allocator);
     defer data.deinit();
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 4. Add SDX code with attribute "MCC" (not "CC")
@@ -168,7 +172,7 @@ test "InitialDiagnosisMarking no match" {
     try data.sdx_codes.append(allocator, sdx);
 
     // 5. Set up winning formula
-    const formulas = formula_data.getFormulas();
+    const formulas = try formula_data.getFormulas();
     context.initial_grouping_context.pdx_match = formulas[0];
 
     // 6. Execute Marking
@@ -247,7 +251,9 @@ test "InitialProcedureMarking execution" {
     var data = models.ProcessingData.init(allocator);
     defer data.deinit();
 
-    var context = models.ProcessingContext.init(allocator, &data);
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+    var context = models.ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     // 4. Add Procedure code with attribute "PROC_ATTR"
@@ -256,7 +262,7 @@ test "InitialProcedureMarking execution" {
     try data.procedure_codes.append(allocator, proc);
 
     // 5. Set up winning formula
-    const formulas = formula_data.getFormulas();
+    const formulas = try formula_data.getFormulas();
     context.initial_grouping_context.pdx_match = formulas[0];
 
     // 6. Execute Marking

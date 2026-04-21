@@ -166,7 +166,7 @@ pub fn doAgeConflictEdit(
     age: i32,
     date: i32,
     age_data: *const mce_data.AgeRangeData,
-) ?struct { edit: usize, conflict_type: mce_enums.AgeConflictType } {
+) !?struct { edit: usize, conflict_type: mce_enums.AgeConflictType } {
     // Check age group attributes — order matches Java (PEDIATRIC, NEWBORN, MATERNITY, ADULT)
     const ordered = [_]struct { attr: Attribute, name: []const u8 }{
         .{ .attr = .PEDIATRIC, .name = "Pediatric" },
@@ -177,7 +177,7 @@ pub fn doAgeConflictEdit(
 
     for (ordered) |group| {
         if (!hasAttr(code_attributes, group.attr)) continue;
-        if (!age_data.isAgeInGroup(age, group.name, date)) {
+        if (!try age_data.isAgeInGroup(age, group.name, date)) {
             if (mce_enums.AgeConflictType.fromGroupName(group.name)) |ct| {
                 return .{ .edit = EDIT_AGE_CONFLICT, .conflict_type = ct };
             }

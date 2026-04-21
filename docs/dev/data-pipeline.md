@@ -1,6 +1,6 @@
 # Data Pipeline
 
-Binary data files in `data/bin/` are precompiled and included in the repo.
+The library uses a single, high-performance LMDB database (`msdrg.mdb`) to store all reference data. This provides zero-copy binary access and sub-microsecond lookups while keeping the memory footprint minimal.
 
 ## Regenerate from raw CMS data
 
@@ -8,31 +8,35 @@ Binary data files in `data/bin/` are precompiled and included in the repo.
 bash scripts/setup_data.sh
 ```
 
+This script extracts raw data from CMS CSV files, imports it into a temporary SQLite database for normalization, compiles it into optimized binary blobs, and finally packages everything into the monolithic `msdrg.mdb` file.
+
 ## Individual steps
 
 ```bash
-# Extract and normalize raw data
+# 1. Extract and normalize raw data
 python scripts/extract_data.py
 
-# Import to SQLite
+# 2. Import to SQLite for processing
 python scripts/import_to_sqlite.py
 
-# Compile to binary
+# 3. Compile optimized binary blobs
 for s in scripts/compile*; do bash "$s"; done
 
-# MCE data
-python scripts/extract_mce_data.py
-python scripts/compile_mce_data.py
+# 4. Consolidate into LMDB database
+python scripts/package_lmdb.py
 ```
 
-## Data files
+## Database Contents
 
-| File | Contents |
+The `msdrg.mdb` file contains various data structures used by the grouper and MCE:
+
+| Category | Description |
 |------|----------|
-| `diagnosis.bin` | Diagnosis code definitions |
-| `drg_formulas.bin` | DRG formula rules |
-| `cluster_*.bin` | Diagnosis cluster mappings |
-| `exclusion_*.bin` | Exclusion groups |
-| `mce_i10dx_master.bin` | ICD-10 diagnosis master |
-| `mce_i10sg_master.bin` | ICD-10 procedure master |
-| `mce_age_ranges.bin` | Age range definitions |
+| **Core** | Diagnosis definitions, DRG formula rules, MDC mappings |
+| **Grouping** | Diagnosis clusters, exclusion groups, gender/MDC rules |
+| **MCE** | ICD-10 DX/SG master tables, age ranges, discharge status |
+| **Conversion** | ICD-10-CM/PCS version-to-version conversion tables |
+
+!!! tip
+    The database is opened in read-only mode with no locking (`MDB_NOLOCK`), making it extremely fast for concurrent analytical workloads across multiple threads.
+

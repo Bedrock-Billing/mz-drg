@@ -192,21 +192,6 @@ class TestGrouperConversion:
             # B880 -> B8801, which is a valid PDX
             assert result["final_drg"] is not None
 
-    def test_structured_api_with_conversion(self):
-        """Conversion also works with group_structured()."""
-        with MsdrgGrouper() as g:
-            result = g.group_structured(
-                {
-                    "version": 431,
-                    "source_icd_version": 2025,
-                    "age": 65,
-                    "sex": 0,
-                    "discharge_status": 1,
-                    "pdx": {"code": "B880"},
-                }
-            )
-            assert result["final_drg"] is not None
-
     def test_deep_copy_no_mutation(self):
         """Conversion doesn't mutate the original claim dict."""
         claim = {
@@ -282,22 +267,3 @@ class TestGrouperConversion:
             )
 
         assert result.get("conversions", []) == []
-
-    def test_conversions_with_structured_api(self):
-        """Conversions field also populated in group_structured()."""
-        with MsdrgGrouper() as g:
-            result = g.group_structured(
-                {
-                    "version": 431,
-                    "source_icd_version": 2025,
-                    "age": 65,
-                    "sex": 0,
-                    "discharge_status": 1,
-                    "pdx": {"code": "B880"},
-                }
-            )
-
-        conversions = result.get("conversions", [])
-        assert len(conversions) == 1
-        assert conversions[0]["original"] == "B880"
-        assert conversions[0]["converted"] == "B8801"

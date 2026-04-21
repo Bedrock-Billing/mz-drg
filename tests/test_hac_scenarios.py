@@ -23,7 +23,7 @@ import pytest
 # Paths
 PROJECT_ROOT = os.getcwd()
 JARS_DIR = os.path.join(PROJECT_ROOT, "jars")
-DATA_DIR = os.path.join(PROJECT_ROOT, "data", "bin")
+DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 
 # Zig Library Path — cross-platform
 if sys.platform == "darwin":

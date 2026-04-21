@@ -23,17 +23,25 @@ pub const PatternData = struct {
         return PatternData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8, magic: u32) !PatternData {
+        const mapped = try common.MappedFile(PatternHeader).initWithData(data, magic);
+        return PatternData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *PatternData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const PatternData) []const PatternEntry {
-        const entries_ptr = @as([*]const PatternEntry, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return entries_ptr[0..self.mapped.header.num_entries];
+    pub fn getEntries(self: *const PatternData) ![]align(1) const PatternEntry {
+        return try self.mapped.getSlice(PatternEntry, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
-    pub fn getPattern(self: *const PatternData, id: u32) ?PatternEntry {
-        const entries = self.getEntries();
+    pub fn getAttributes(self: *const PatternData, entry: PatternEntry) ![]align(1) const common.StringRef {
+        return try self.getCodes(entry);
+    }
+
+    pub fn getPattern(self: *const PatternData, id: u32) !?PatternEntry {
+        const entries = try self.getEntries();
         var left: usize = 0;
         var right: usize = entries.len;
 
@@ -52,9 +60,8 @@ pub const PatternData = struct {
         return null;
     }
 
-    pub fn getAttributes(self: *const PatternData, entry: PatternEntry) []const common.StringRef {
-        const list_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr() + entry.offset)));
-        return list_ptr[0..entry.count];
+    pub fn getCodes(self: *const PatternData, entry: PatternEntry) ![]align(1) const common.StringRef {
+        return try self.mapped.getSlice(common.StringRef, entry.offset, entry.count);
     }
 };
 
@@ -112,18 +119,18 @@ test "PatternData lookup" {
     var data = try PatternData.init(filename, 0x44585054);
     defer data.deinit();
 
-    const p1 = data.getPattern(10);
+    const p1 = try data.getPattern(10);
     try std.testing.expect(p1 != null);
     try std.testing.expectEqual(@as(u32, 10), p1.?.id);
 
-    const attrs1 = data.getAttributes(p1.?);
+    const attrs1 = try data.getAttributes(p1.?);
     try std.testing.expectEqual(@as(usize, 1), attrs1.len);
-    try std.testing.expect(std.mem.eql(u8, attrs1[0].get(@as([*]const u8, @ptrCast(data.mapped.base_ptr()))), "ABC"));
+    try std.testing.expect(std.mem.eql(u8, try attrs1[0].get(@as([*c]const u8, @ptrCast(data.mapped.base_ptr())), data.mapped.data.len), "ABC"));
 
-    const p2 = data.getPattern(20);
+    const p2 = try data.getPattern(20);
     try std.testing.expect(p2 != null);
     try std.testing.expectEqual(@as(u32, 20), p2.?.id);
 
-    const p3 = data.getPattern(99);
+    const p3 = try data.getPattern(99);
     try std.testing.expect(p3 == null);
 }

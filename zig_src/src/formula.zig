@@ -50,63 +50,39 @@ pub const FormulaData = struct {
         return FormulaData{ .mapped = mapped };
     }
 
+    pub fn initWithData(data: []const u8) !FormulaData {
+        const mapped = try common.MappedFile(FormulasHeader).initWithData(data, 0x464F524D);
+        return FormulaData{ .mapped = mapped };
+    }
+
     pub fn deinit(self: *FormulaData) void {
         self.mapped.deinit();
     }
 
-    pub fn getEntries(self: *const FormulaData) []const FormulaEntryIndex {
-        const entries_ptr = @as([*]const FormulaEntryIndex, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.entries_offset)));
-        return entries_ptr[0..self.mapped.header.num_entries];
+    pub fn getIndices(self: *const FormulaData) ![]align(1) const FormulaEntryIndex {
+        return try self.mapped.getSlice(FormulaEntryIndex, self.mapped.header.entries_offset, self.mapped.header.num_entries);
     }
 
-    pub fn getEntry(self: *const FormulaData, mdc: i32, version: i32) ?FormulaEntryIndex {
-        const entries = self.getEntries();
-        var left: usize = 0;
-        var right: usize = entries.len;
-
-        while (left < right) {
-            const mid = left + (right - left) / 2;
-            const entry = entries[mid];
-
-            if (entry.mdc < mdc) {
-                left = mid + 1;
-            } else if (entry.mdc > mdc) {
-                right = mid;
-            } else {
-                // Found match, check version
-                if (version >= entry.version_start and version <= entry.version_end) {
-                    return entry;
-                }
-                // Scan backwards
-                var i = mid;
-                while (i > 0) {
-                    i -= 1;
-                    const prev = entries[i];
-                    if (prev.mdc != mdc) break;
-                    if (version >= prev.version_start and version <= prev.version_end) return prev;
-                }
-                // Scan forwards
-                i = mid + 1;
-                while (i < entries.len) {
-                    const next = entries[i];
-                    if (next.mdc != mdc) break;
-                    if (version >= next.version_start and version <= next.version_end) return next;
-                    i += 1;
-                }
-                return null;
-            }
-        }
-        return null;
+    pub fn getEntries(self: *const FormulaData) ![]align(1) const FormulaEntryIndex {
+        return try self.getIndices();
     }
 
-    pub fn getFormulas(self: *const FormulaData) []const DrgFormula {
-        const formulas_ptr = @as([*]const DrgFormula, @ptrCast(@alignCast(self.mapped.base_ptr() + self.mapped.header.formulas_offset)));
-        return formulas_ptr[0..self.mapped.header.num_formulas];
+    pub fn getSuppressionList(self: *const FormulaData, offset: u32, count: u32) ![]align(1) const common.StringRef {
+        return try self.getSupplemental(offset, count);
     }
 
-    pub fn getSuppressionList(self: *const FormulaData, offset: u32, count: u32) []const common.StringRef {
-        const supp_ptr = @as([*]const common.StringRef, @ptrCast(@alignCast(self.mapped.base_ptr() + offset)));
-        return supp_ptr[0..count];
+    pub fn getEntry(self: *const FormulaData, mdc: i32, version: i32) !?FormulaEntryIndex {
+        const entries = try self.getEntries();
+        const Adapter = common.search.intKey(FormulaEntryIndex, i32, "mdc");
+        return common.search.versionedBinarySearch(FormulaEntryIndex, i32, Adapter.getKey, Adapter.compare, Adapter.equal, entries, mdc, version);
+    }
+
+    pub fn getFormulas(self: *const FormulaData) ![]align(1) const DrgFormula {
+        return try self.mapped.getSlice(DrgFormula, self.mapped.header.formulas_offset, self.mapped.header.num_formulas);
+    }
+
+    pub fn getSupplemental(self: *const FormulaData, offset: u32, count: u32) ![]align(1) const common.StringRef {
+        return try self.mapped.getSlice(common.StringRef, offset, count);
     }
 };
 
@@ -159,15 +135,15 @@ test "FormulaData lookup" {
     var data = try FormulaData.init(filename);
     defer data.deinit();
 
-    const e1 = data.getEntry(1, 405);
+    const e1 = try data.getEntry(1, 405);
     try std.testing.expect(e1 != null);
     try std.testing.expectEqual(@as(i32, 1), e1.?.mdc);
 
-    const e2 = data.getEntry(2, 420);
+    const e2 = try data.getEntry(2, 420);
     try std.testing.expect(e2 != null);
     try std.testing.expectEqual(@as(i32, 2), e2.?.mdc);
 
-    const e3 = data.getEntry(1, 420); // Version mismatch
+    const e3 = try data.getEntry(1, 420); // Version mismatch
     try std.testing.expect(e3 == null);
 }
 
@@ -293,10 +269,12 @@ pub const Parser = struct {
 
     fn parseExpression(self: *Parser) !*AstNode {
         var left = try self.parseTerm();
+        errdefer Evaluator.free(left, self.allocator);
 
         while (self.pos < self.tokens.len and self.tokens[self.pos].type == .OR) {
             self.pos += 1; // Eat OR
             const right = try self.parseTerm();
+            errdefer Evaluator.free(right, self.allocator);
 
             const node = try self.allocator.create(AstNode);
             node.* = AstNode{ .Or = .{ .left = left, .right = right } };
@@ -307,10 +285,12 @@ pub const Parser = struct {
 
     fn parseTerm(self: *Parser) !*AstNode {
         var left = try self.parseFactor();
+        errdefer Evaluator.free(left, self.allocator);
 
         while (self.pos < self.tokens.len and self.tokens[self.pos].type == .AND) {
             self.pos += 1; // Eat AND
             const right = try self.parseFactor();
+            errdefer Evaluator.free(right, self.allocator);
 
             const node = try self.allocator.create(AstNode);
             node.* = AstNode{ .And = .{ .left = left, .right = right } };
@@ -333,6 +313,8 @@ pub const Parser = struct {
             },
             .LPAREN => {
                 const expr = try self.parseExpression();
+                errdefer Evaluator.free(expr, self.allocator);
+
                 if (self.pos >= self.tokens.len or self.tokens[self.pos].type != .RPAREN) {
                     return error.MissingClosingParenthesis;
                 }
@@ -341,6 +323,8 @@ pub const Parser = struct {
             },
             .NOT => {
                 const factor = try self.parseFactor();
+                errdefer Evaluator.free(factor, self.allocator);
+
                 const node = try self.allocator.create(AstNode);
                 node.* = AstNode{ .Not = .{ .child = factor } };
                 return node;
@@ -460,6 +444,72 @@ pub const Evaluator = struct {
                 return false;
             },
         }
+    }
+};
+
+pub const AstCache = struct {
+    map: std.StringHashMap(*AstNode),
+    allocator: std.mem.Allocator,
+    io: std.Io.Threaded,
+    lock: std.Io.RwLock,
+
+    pub fn init(allocator: std.mem.Allocator) AstCache {
+        return .{
+            .map = std.StringHashMap(*AstNode).init(allocator),
+            .allocator = allocator,
+            .lock = .init,
+            .io = std.Io.Threaded.init(allocator, .{}),
+        };
+    }
+
+    pub fn deinit(self: *AstCache) void {
+        var it = self.map.iterator();
+        while (it.next()) |entry| {
+            self.allocator.free(entry.key_ptr.*);
+            Evaluator.free(entry.value_ptr.*, self.allocator);
+        }
+        self.map.deinit();
+    }
+
+    /// Look up or parse-and-cache a formula string.
+    /// The returned *AstNode is owned by the cache and must NOT be freed by the caller.
+    /// AST nodes are immutable after creation so concurrent reads are safe.
+    pub fn getOrParse(self: *AstCache, formula_str: []const u8) !*AstNode {
+        // 1. Fast path: already cached (read lock)
+        try self.lock.lockShared(self.io.io());
+        if (self.map.get(formula_str)) |node| {
+            self.lock.unlockShared(self.io.io());
+            return node;
+        }
+        self.lock.unlockShared(self.io.io());
+
+        // 2. Cache miss: Parse the formula.
+        // We do parsing OUTSIDE the write lock to keep the lock duration short.
+        var lexer = Lexer.init(formula_str);
+        var tokens = try lexer.tokenize(self.allocator);
+        defer tokens.deinit(self.allocator);
+
+        var parser = Parser.init(self.allocator, tokens.items);
+        const node = try parser.parse();
+        errdefer Evaluator.free(node, self.allocator);
+
+        // 3. Insert into cache (write lock)
+        try self.lock.lock(self.io.io());
+        defer self.lock.unlock(self.io.io());
+
+        // 4. Double-check: another thread might have inserted while we were parsing
+        if (self.map.get(formula_str)) |existing| {
+            // Re-use existing node, free the one we just parsed
+            Evaluator.free(node, self.allocator);
+            return existing;
+        }
+
+        // 5. Success: duplicate key and insert
+        const key = try self.allocator.dupe(u8, formula_str);
+        errdefer self.allocator.free(key);
+
+        try self.map.put(key, node);
+        return node;
     }
 };
 

@@ -31,9 +31,7 @@ import msdrg
 with msdrg.MceEditor() as mce:
     result = mce.edit({
         "discharge_date": 20250101,
-        "age": 65,
-        "sex": 0,
-        "discharge_status": 1,
+        "age": 65, "sex": 0, "discharge_status": 1,
         "pdx": {"code": "I5020"},
         "sdx": [],
         "procedures": []
@@ -54,7 +52,7 @@ result = mce.edit(mce_claim)
 
 ## Validation
 
-The MCE is validated against the CMS Java MCE 2.0 v43.1 with a **100% match rate** on 49,996 test claims.
+The MCE is validated against the CMS Java MCE 2.0 v43.1 with a **100% match rate** on 50,000 test claims.
 
 ## Thread safety
 

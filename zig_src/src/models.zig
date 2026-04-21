@@ -507,14 +507,16 @@ pub const ProcessingContext = struct {
     initial_mdc: std.ArrayList(i32) = .empty,
     final_mdc: std.ArrayList(i32) = .empty,
     allocator: std.mem.Allocator,
+    ast_cache: *formula.AstCache,
 
-    pub fn init(allocator: std.mem.Allocator, data: *ProcessingData, runtime: RuntimeOptions) ProcessingContext {
+    pub fn init(allocator: std.mem.Allocator, data: *ProcessingData, runtime: RuntimeOptions, ast_cache: *formula.AstCache) ProcessingContext {
         return ProcessingContext{
             .data = data,
             .runtime = runtime,
             .initial_grouping_context = .{},
             .final_grouping_context = .{},
             .allocator = allocator,
+            .ast_cache = ast_cache,
         };
     }
 
@@ -633,8 +635,10 @@ test "models basic usage" {
     try data.sdx_codes.append(allocator, try DiagnosisCode.init("B002", 'N'));
     try std.testing.expectEqual(data.sdx_codes.items.len, 1);
 
-    // Test ProcessingContext
-    var context = ProcessingContext.init(allocator, &data, .{});
+    var ast_cache = formula.AstCache.init(allocator);
+    defer ast_cache.deinit();
+
+    var context = ProcessingContext.init(allocator, &data, .{}, &ast_cache);
     defer context.deinit();
 
     try context.initial_mdc.append(allocator, 1);
