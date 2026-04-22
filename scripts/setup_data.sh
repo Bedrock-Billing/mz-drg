@@ -42,4 +42,4 @@ cd "$REPO_ROOT"
 echo "Packaging reference data into LMDB"
 $PYTHON scripts/package_lmdb.py
 
-echo "Done. Binary data should be in data/bin/ and LMDB at data/msdrg.mdb."
+echo "Done. LMDB database created at data/msdrg.mdb."

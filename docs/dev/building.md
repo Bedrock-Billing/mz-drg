@@ -72,7 +72,7 @@ mz-drg/
 │       ├── mce.zig              # MCE main editor
 │       ├── mce_c_api.zig        # MCE C ABI exports
 │       └── ...                  # Additional modules
-├── data/bin/                    # Consolidated LMDB database (msdrg.mdb)
+├── data/                        # Consolidated LMDB database (msdrg.mdb)
 ├── scripts/                     # Data extraction & compilation
 ├── tests/                       # Comparison & benchmark tools
 ├── docs/                        # Documentation (MkDocs)

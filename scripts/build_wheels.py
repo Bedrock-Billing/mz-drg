@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent.parent.resolve()
 ZIG_SRC_DIR = ROOT_DIR / "zig_src"
 MSDRG_PKG_DIR = ROOT_DIR / "msdrg"
-DATA_SRC_DIR = ROOT_DIR / "data" / "bin"
+DATA_SRC_DIR = ROOT_DIR / "data"
 DIST_DIR = ROOT_DIR / "dist"
 
 
@@ -161,7 +161,7 @@ def build_wheel(platform_tag: str, lib_path: Path) -> Path:
         whl.write(lib_path, lib_arcname)
 
         # Add data files
-        for data_file in sorted(DATA_SRC_DIR.glob("*.bin")):
+        for data_file in sorted(DATA_SRC_DIR.glob("*.mdb")):
             arcname = f"msdrg/data/{data_file.name}"
             whl.write(data_file, arcname)
 

@@ -138,7 +138,7 @@ test "validateAge" {
 }
 
 test "validateCode real file" {
-    const data_dir = "../data/bin/";
+    const data_dir = "../data/";
     var dx_data = mce_data.CodeMasterData.init(data_dir ++ "mce_i10dx_master.bin") catch return;
     defer dx_data.deinit();
 
@@ -164,7 +164,7 @@ test "validateCode real file" {
 }
 
 test "loadAttributes real file" {
-    const data_dir = "../data/bin/";
+    const data_dir = "../data/";
     var dx_data = mce_data.CodeMasterData.init(data_dir ++ "mce_i10dx_master.bin") catch return;
     defer dx_data.deinit();
 
@@ -183,7 +183,7 @@ test "loadAttributes real file" {
 }
 
 test "validateDischargeStatus real file" {
-    const data_dir = "../data/bin/";
+    const data_dir = "../data/";
     var ds_data = mce_data.DischargeStatusData.init(data_dir ++ "mce_discharge_status.bin") catch return;
     defer ds_data.deinit();
 

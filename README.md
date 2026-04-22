@@ -69,9 +69,7 @@ import msdrg
 with msdrg.MceEditor() as mce:
     result = mce.edit({
         "discharge_date": 20250101,
-        "age": 65,
-        "sex": 0,
-        "discharge_status": 1,
+        "age": 65, "sex": 0, "discharge_status": 1,
         "pdx": {"code": "I5020"},
         "sdx": [{"code": "E1165"}],
         "procedures": []
@@ -353,7 +351,7 @@ python -m pytest tests/
 
 ### Data pipeline
 
-The binary data files (`data/bin/*.bin`) are prebuilt and included in the repository. To regenerate them from the raw CMS CSVs:
+The binary data files are prebuilt and included in the monolithic `data/msdrg.mdb` database. To regenerate it from the raw CMS CSVs:
 
 ```bash
 bash scripts/setup_data.sh
@@ -390,7 +388,7 @@ mz-drg exposes a C ABI for integration with any language. A complete header is a
 ```c
 #include "msdrg.h"
 
-void* ctx = msdrg_context_init("/path/to/data/bin");
+void* ctx = msdrg_context_init("/path/to/data");
 const char* result = msdrg_group_json(ctx, "{\"version\":431,...}");
 msdrg_string_free(result);
 msdrg_context_free(ctx);
@@ -401,7 +399,7 @@ msdrg_context_free(ctx);
 ```c
 #include "msdrg.h"
 
-MceContext mce = mce_context_init("/path/to/data/bin");
+MceContext mce = mce_context_init("/path/to/data");
 const char* result = mce_edit_json(mce, "{\"discharge_date\":20250101,...}");
 msdrg_string_free(result);
 mce_context_free(mce);
@@ -412,7 +410,7 @@ mce_context_free(mce);
 ```c
 #include "msdrg.h"
 
-MsdrgContext ctx = msdrg_context_init("/path/to/data/bin");
+MsdrgContext ctx = msdrg_context_init("/path/to/data");
 
 // Convert a diagnosis code (FY2025 → FY2026)
 const char* converted = msdrg_convert_dx(ctx, "B880", 2025, 2026);
@@ -458,7 +456,7 @@ mz-drg/
 │       ├── mce_enums.zig        # MCE attributes & edits
 │       ├── mce_editing.zig      # MCE edit rules
 │       └── mce_validation.zig   # MCE validation logic
-├── data/bin/                    # Prebuilt binary data (24 files)
+├── data/                        # Consolidated LMDB database (msdrg.mdb)
 ├── scripts/                     # Data extraction & compilation
 │   ├── compile_icd_conversions.py  # ICD conversion table compiler
 │   └── ...
@@ -480,3 +478,4 @@ Full documentation is available at **[Bedrock-Billing.github.io/mz-drg](https://
 ## Acknowledgments
 
 This project is intended for healthcare IT professionals who need fast, embeddable, and auditable claim processing tools.
+

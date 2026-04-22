@@ -421,7 +421,7 @@ test "FlagIterator" {
 }
 
 test "CodeMasterData real file lookup" {
-    const data_dir = "../data/bin/";
+    const data_dir = "../data/";
     const i10dx_path = data_dir ++ "mce_i10dx_master.bin";
 
     var dx_data = CodeMasterData.init(i10dx_path) catch |err| {
@@ -459,7 +459,7 @@ test "CodeMasterData real file lookup" {
 }
 
 test "AgeRangeData real file" {
-    const data_dir = "../data/bin/";
+    const data_dir = "../data/";
     const age_path = data_dir ++ "mce_age_ranges.bin";
 
     var age_data = AgeRangeData.init(age_path) catch |err| {
@@ -487,7 +487,7 @@ test "AgeRangeData real file" {
 }
 
 test "DischargeStatusData real file" {
-    const data_dir = "../data/bin/";
+    const data_dir = "../data/";
     const ds_path = data_dir ++ "mce_discharge_status.bin";
 
     var ds_data = DischargeStatusData.init(ds_path) catch |err| {

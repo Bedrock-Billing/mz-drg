@@ -3,7 +3,7 @@
 Compile MCE data from protobuf (mce.bin) into binary lookup tables for Zig.
 
 Usage:
-    python scripts/compile_mce_data.py [--input mce.bin] [--output-dir data/bin]
+    python scripts/compile_mce_data.py [--input mce.bin] [--output-dir data]
 
 Generates 6 binary files:
     mce_i10dx_master.bin    ICD-10 diagnosis codes
@@ -70,7 +70,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import mce_pb2
 
 DEFAULT_MCE_BIN = "java_code/mce/MCE-2.0-43.1.0.0-sources/mce.bin"
-DEFAULT_OUTPUT_DIR = "data/bin"
+DEFAULT_OUTPUT_DIR = "data"
 
 # Magic numbers
 MAGIC_CODE_MASTER = 0x4D434544  # "MCED"
