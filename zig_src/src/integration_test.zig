@@ -83,7 +83,7 @@ test "Full Grouper Chain Integration" {
         try writeU32(f, 100); // List data offset
 
         // Entry 1: "A001" -> Cluster 0
-        var code: [8]u8 = [_]u8{0} ** 8;
+        var code: [8]u8 = @splat(0);
         @memcpy(code[0..4], "A001");
         try std.Io.File.writeStreamingAll(f, std.testing.io, &code);
         try writeI32(f, 400); // v_start
@@ -145,7 +145,7 @@ test "Full Grouper Chain Integration" {
 
         // Diagnosis Entry (at 40)
         // code(8), v_start(4), v_end(4), scheme_id(4)
-        var code: [8]u8 = [_]u8{0} ** 8;
+        var code: [8]u8 = @splat(0);
         @memcpy(code[0..4], "A001");
         try std.Io.File.writeStreamingAll(f, std.testing.io, &code);
         try writeI32(f, 400); // v_start
@@ -291,7 +291,7 @@ test "Full Grouper Chain Integration" {
         try writeI32(f, 1); // Rank
         try writeI32(f, 100); // Base DRG
         try writeI32(f, 100); // DRG
-        try std.Io.File.writeStreamingAll(f, std.testing.io, &[_]u8{0} ** 8); // Surgical
+        try std.Io.File.writeStreamingAll(f, std.testing.io, &@as([8]u8, @splat(0))); // Surgical
         try writeI32(f, 0); // Reroute MDC
         try writeI32(f, 0); // Severity
         try writeU32(f, 100); // Formula offset

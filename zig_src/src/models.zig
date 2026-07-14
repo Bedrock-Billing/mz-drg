@@ -224,7 +224,7 @@ pub const SourceLogicLists = struct {
 pub const Attribute = struct {
     list_name: []const u8,
     prefix: AttributePrefix = .NONE,
-    mdc_suppression: std.bit_set.IntegerBitSet(32) = std.bit_set.IntegerBitSet(32).initEmpty(),
+    mdc_suppression: std.bit_set.IntegerBitSet(32) = .empty,
 
     pub fn eql(self: Attribute, other: Attribute) bool {
         return std.mem.eql(u8, self.list_name, other.list_name) and self.prefix == other.prefix;
@@ -283,14 +283,14 @@ pub const DiagnosisCode = struct {
     attribute_marked_for: ?Attribute,
 
     pub fn init(code_str: []const u8, poa: u8) !DiagnosisCode {
-        var code = common.Code{ .value = [_]u8{0} ** 8 };
+        var code = common.Code{ .value = @splat(0) };
         const len = @min(code_str.len, 8);
         @memcpy(code.value[0..len], code_str[0..len]);
 
         return DiagnosisCode{
             .value = code,
             .poa = poa,
-            .flags = std.EnumSet(CodeFlag).initEmpty(),
+            .flags = .empty,
             .mdc = null,
             .severity = .NONE,
             .drg_impact = .NONE,
@@ -350,18 +350,18 @@ pub const ProcedureCode = struct {
     hac_usage_flag: std.EnumSet(ProcedureHacUsage),
 
     pub fn init(code_str: []const u8) !ProcedureCode {
-        var code = common.Code{ .value = [_]u8{0} ** 8 };
+        var code = common.Code{ .value = @splat(0) };
         const len = @min(code_str.len, 8);
         @memcpy(code.value[0..len], code_str[0..len]);
 
         return ProcedureCode{
             .value = code,
-            .flags = std.EnumSet(CodeFlag).initEmpty(),
+            .flags = .empty,
             .is_operating_room = true,
-            .mdc_suppression = std.bit_set.IntegerBitSet(32).initEmpty(),
+            .mdc_suppression = .empty,
             .is_valid_code = false,
             .drg_impact = .NONE,
-            .hac_usage_flag = std.EnumSet(ProcedureHacUsage).initEmpty(),
+            .hac_usage_flag = .empty,
         };
     }
 

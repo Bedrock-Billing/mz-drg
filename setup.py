@@ -4,10 +4,10 @@ Custom setup.py for building the msdrg package.
 Compiles the Zig shared library and bundles data files during
 'pip install' or 'python setup.py build_ext'.
 
-Zig compiler search order:
-1. ZIG environment variable (if set)
-2. System 'zig' command (must be >= 0.16.0)
-3. ziglang Python package (if compatible version installed)
+    Zig compiler search order:
+    1. ZIG environment variable (if set)
+    2. System 'zig' command (must be >= 0.17.0)
+    3. ziglang Python package (if compatible version installed)
 """
 
 import os
@@ -24,7 +24,7 @@ ZIG_SRC_DIR = ROOT_DIR / "zig_src"
 DATA_SRC_DIR = ROOT_DIR / "data"
 MSDRG_PKG_DIR = ROOT_DIR / "msdrg"
 
-MIN_ZIG_VERSION = (0, 16, 0)
+MIN_ZIG_VERSION = (0, 17, 0)
 
 
 def get_lib_name() -> str:
@@ -39,8 +39,8 @@ def get_lib_name() -> str:
 
 
 def parse_zig_version(version_str: str) -> tuple[int, ...]:
-    """Parse a zig version string like '0.16.0-dev.123+abc' into a tuple."""
-    # Strip dev/nightly suffixes: "0.16.0-dev.123+abc" -> "0.16.0"
+    """Parse a zig version string like '0.17.0-dev.123+abc' into a tuple."""
+    # Strip dev/nightly suffixes: "0.17.0-dev.123+abc" -> "0.17.0"
     clean = version_str.split("-")[0].split("+")[0]
     parts = clean.split(".")
     result = []

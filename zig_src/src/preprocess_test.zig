@@ -46,7 +46,7 @@ test "MsdrgExclusions logic" {
         try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Offset
 
         // Entry: A001 -> 1
-        var code_buf: [8]u8 = [_]u8{0} ** 8;
+        var code_buf: [8]u8 = @splat(0);
         @memcpy(code_buf[0..4], "A001");
         try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
         std.mem.writeInt(i32, &b, 400, .little);
@@ -79,7 +79,7 @@ test "MsdrgExclusions logic" {
         try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Offset
 
         // List Data: "B002"
-        var code_buf: [8]u8 = [_]u8{0} ** 8;
+        var code_buf: [8]u8 = @splat(0);
         @memcpy(code_buf[0..4], "B002");
         try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
     }
@@ -155,7 +155,7 @@ test "PdxAttributeProcessor logic" {
         try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Dx Cat Pattern
 
         // Diagnosis 0 (20 bytes): "A001", v400-410, Scheme 0
-        var code_buf: [8]u8 = [_]u8{0} ** 8;
+        var code_buf: [8]u8 = @splat(0);
         @memcpy(code_buf[0..4], "A001");
         try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
         std.mem.writeInt(i32, &b, 400, .little);
@@ -220,7 +220,7 @@ test "PdxAttributeProcessor logic" {
         try std.Io.File.writeStreamingAll(file, std.testing.io, &b);
 
         // Entry
-        var code_buf: [8]u8 = [_]u8{0} ** 8;
+        var code_buf: [8]u8 = @splat(0);
         @memcpy(code_buf[0..4], "A001");
         try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
         std.mem.writeInt(i32, &b, 400, .little);
@@ -345,7 +345,7 @@ test "SdxAttributeProcessor logic" {
         try std.Io.File.writeStreamingAll(file, std.testing.io, &b); // Dx Cat Pattern
 
         // Diagnosis 0: "B002"
-        var code_buf: [8]u8 = [_]u8{0} ** 8;
+        var code_buf: [8]u8 = @splat(0);
         @memcpy(code_buf[0..4], "B002");
         try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
         std.mem.writeInt(i32, &b, 400, .little);

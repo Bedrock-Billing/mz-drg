@@ -51,7 +51,7 @@ test "MsdrgFinalPreGrouping logic" {
         try writeI32(file, 1); // rank
         try writeI32(file, 1); // base_drg
         try writeI32(file, 1); // drg
-        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &@as([8]u8, @splat(0))); // surgical
         try writeI32(file, 0); // reroute
         try writeI32(file, 0); // severity
         try writeU32(file, 100); // formula_offset

@@ -51,7 +51,7 @@ test "InitialDiagnosisMarking execution" {
     try writeI32(file, 1); // rank
     try writeI32(file, 100); // base_drg
     try writeI32(file, 101); // drg
-    try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
+    try std.Io.File.writeStreamingAll(file, std.testing.io, &@as([8]u8, @splat(0))); // surgical
     try writeI32(file, 0); // reroute
     try writeI32(file, 1); // severity
     try writeU32(file, 128); // formula_offset
@@ -142,7 +142,7 @@ test "InitialDiagnosisMarking no match" {
     try writeI32(file, 1); // rank
     try writeI32(file, 100); // base_drg
     try writeI32(file, 101); // drg
-    try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
+    try std.Io.File.writeStreamingAll(file, std.testing.io, &@as([8]u8, @splat(0))); // surgical
     try writeI32(file, 0); // reroute
     try writeI32(file, 1); // severity
     try writeU32(file, 128); // formula_offset
@@ -232,7 +232,7 @@ test "InitialProcedureMarking execution" {
     try writeI32(file, 1); // rank
     try writeI32(file, 100); // base_drg
     try writeI32(file, 101); // drg
-    try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
+    try std.Io.File.writeStreamingAll(file, std.testing.io, &@as([8]u8, @splat(0))); // surgical
     try writeI32(file, 0); // reroute
     try writeI32(file, 1); // severity
     try writeU32(file, 128); // formula_offset

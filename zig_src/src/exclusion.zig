@@ -113,7 +113,7 @@ test "ExclusionData lookup" {
 
     // Write Data
     // Group 1 codes
-    var code_buf: [8]u8 = [_]u8{0} ** 8;
+    var code_buf: [8]u8 = @splat(0);
     @memcpy(code_buf[0..4], "A001");
     try std.Io.File.writeStreamingAll(file, std.testing.io, &code_buf);
 

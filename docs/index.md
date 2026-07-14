@@ -3,7 +3,7 @@
 **High-performance CMS claim processing tools written in Zig with Python bindings.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/Bedrock-Billing/mz-drg/blob/main/LICENSE)
-[![Zig](https://img.shields.io/badge/Zig-0.16-orange.svg)](https://ziglang.org)
+[![Zig](https://img.shields.io/badge/Zig-0.17-orange.svg)](https://ziglang.org)
 [![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://python.org)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Bedrock-Billing.github.io/mz-drg/)
 

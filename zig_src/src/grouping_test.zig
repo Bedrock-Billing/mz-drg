@@ -51,7 +51,7 @@ test "MsdrgInitialPreGrouping logic" {
         try writeI32(file, 1); // rank
         try writeI32(file, 1); // base_drg
         try writeI32(file, 1); // drg
-        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8); // surgical
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &@as([8]u8, @splat(0))); // surgical
         try writeI32(file, 0); // reroute
         try writeI32(file, 0); // severity
         try writeU32(file, 100); // formula_offset
@@ -176,7 +176,7 @@ test "MsdrgInitialRerouting logic" {
         try writeI32(file, 1);
         try writeI32(file, 0);
         try writeI32(file, 0);
-        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &@as([8]u8, @splat(0)));
         try writeI32(file, 1); // reroute to MDC 1
         try writeI32(file, 0);
         try writeU32(file, 200); // "MCC"
@@ -189,7 +189,7 @@ test "MsdrgInitialRerouting logic" {
         try writeI32(file, 1);
         try writeI32(file, 2); // base_drg 2
         try writeI32(file, 2); // drg 2
-        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &@as([8]u8, @splat(0)));
         try writeI32(file, 0); // no reroute
         try writeI32(file, 0);
         try writeU32(file, 204); // "AGE>65"
@@ -320,7 +320,7 @@ test "MsdrgInitialPdxGrouping logic" {
         try writeI32(file, 1);
         try writeI32(file, 500); // base_drg
         try writeI32(file, 500); // drg
-        try std.Io.File.writeStreamingAll(file, std.testing.io, &[_]u8{0} ** 8);
+        try std.Io.File.writeStreamingAll(file, std.testing.io, &@as([8]u8, @splat(0)));
         try writeI32(file, 0); // no reroute
         try writeI32(file, 0);
         try writeU32(file, 100); // "MCC"

@@ -85,8 +85,9 @@ fn parsePoa(poa_str: ?[]const u8) u8 {
 }
 
 fn intToEnum(comptime T: type, v: i32, default: T) T {
-    inline for (std.meta.fields(T)) |f| {
-        if (v == f.value) return @enumFromInt(f.value);
+    const info = @typeInfo(T).@"enum";
+    inline for (info.field_values) |value| {
+        if (v == value) return @enumFromInt(value);
     }
     return default;
 }
@@ -108,9 +109,10 @@ fn parseTieBreaker(str: ?[]const u8) models.MarkingLogicTieBreaker {
 
 fn mapDiagnosisOutput(arena: std.mem.Allocator, dx: models.DiagnosisCode) !DiagnosisOutput {
     var flags_list: std.ArrayListUnmanaged([]const u8) = .empty;
-    inline for (std.meta.fields(models.CodeFlag)) |f| {
-        if (dx.is(@enumFromInt(f.value))) {
-            try flags_list.append(arena, @tagName(@as(models.CodeFlag, @enumFromInt(f.value))));
+    inline for (@typeInfo(models.CodeFlag).@"enum".field_names) |name| {
+        const flag: models.CodeFlag = @field(models.CodeFlag, name);
+        if (dx.is(flag)) {
+            try flags_list.append(arena, name);
         }
     }
 
@@ -137,9 +139,10 @@ fn mapDiagnosisOutput(arena: std.mem.Allocator, dx: models.DiagnosisCode) !Diagn
 
 fn mapProcedureOutput(arena: std.mem.Allocator, proc: models.ProcedureCode) !ProcedureOutput {
     var flags_list: std.ArrayListUnmanaged([]const u8) = .empty;
-    inline for (std.meta.fields(models.CodeFlag)) |f| {
-        if (proc.is(@enumFromInt(f.value))) {
-            try flags_list.append(arena, @tagName(@as(models.CodeFlag, @enumFromInt(f.value))));
+    inline for (@typeInfo(models.CodeFlag).@"enum".field_names) |name| {
+        const flag: models.CodeFlag = @field(models.CodeFlag, name);
+        if (proc.is(flag)) {
+            try flags_list.append(arena, name);
         }
     }
 

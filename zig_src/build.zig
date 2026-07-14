@@ -4,6 +4,15 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const lmdb_header = b.addTranslateC(.{
+        .root_source_file = b.path("src/vendor/lmdb/lmdb.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    lmdb_header.addIncludePath(b.path("src/vendor/lmdb"));
+    const lmdb_module = lmdb_header.createModule();
+
     const exe = b.addExecutable(.{
         .name = "msdrg",
         .root_module = b.createModule(.{
@@ -13,6 +22,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     exe.root_module.link_libc = true;
+    exe.root_module.addImport("lmdb", lmdb_module);
     exe.root_module.addIncludePath(b.path("src/vendor/lmdb"));
     exe.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/mdb.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
     exe.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/midl.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
@@ -30,6 +40,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     lib.root_module.link_libc = true;
+    lib.root_module.addImport("lmdb", lmdb_module);
     lib.root_module.addIncludePath(b.path("src/vendor/lmdb"));
     lib.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/mdb.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
     lib.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/midl.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
@@ -45,9 +56,7 @@ pub fn build(b: *std.Build) void {
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    run_cmd.addPassthruArgs();
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
@@ -60,6 +69,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
     unit_tests.root_module.link_libc = true;
+    unit_tests.root_module.addImport("lmdb", lmdb_module);
     unit_tests.root_module.addIncludePath(b.path("src/vendor/lmdb"));
     unit_tests.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/mdb.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });
     unit_tests.root_module.addCSourceFile(.{ .file = b.path("src/vendor/lmdb/midl.c"), .flags = &[_][]const u8{"-Wno-unused-parameter"} });

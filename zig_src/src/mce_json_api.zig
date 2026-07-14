@@ -185,7 +185,7 @@ test "processMceJson valid claim" {
 
     var comp = mce.MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
-        return;
+        return error.SkipZigTest;
     };
     defer comp.deinit();
 
@@ -210,7 +210,7 @@ test "processMceJson E-code as PDX" {
 
     var comp = mce.MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
-        return;
+        return error.SkipZigTest;
     };
     defer comp.deinit();
 

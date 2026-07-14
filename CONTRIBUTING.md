@@ -6,7 +6,7 @@ Thank you for considering contributing to mz-drg! This guide will help you get s
 
 ### Prerequisites
 
-- **Zig 0.16+** — [download](https://ziglang.org/download/)
+- **Zig 0.17+** — [download](https://ziglang.org/download/)
 - **Python 3.11+**
 - **uv** (recommended) or **pip**
 - **JDK 17+** (only for comparison testing against CMS Java reference)

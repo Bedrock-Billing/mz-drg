@@ -113,8 +113,8 @@ pub const Attribute = enum {
 
     /// Map a proto flag string to an Attribute enum value.
     pub fn fromFlag(flag: []const u8) ?Attribute {
-        inline for (std.meta.fields(Attribute)) |f| {
-            const attr: Attribute = @enumFromInt(f.value);
+        inline for (@typeInfo(Attribute).@"enum".field_names) |name| {
+            const attr: Attribute = @field(Attribute, name);
             if (std.mem.eql(u8, flag, attr.flagString())) return attr;
         }
         return null;
@@ -299,7 +299,7 @@ pub const Sex = enum {
 // --- Data Models ---
 
 pub const MceDiagnosisCode = struct {
-    code: [8]u8 = [_]u8{0} ** 8,
+    code: [8]u8 = @splat(0),
     attributes: std.ArrayListUnmanaged(Attribute) = .empty,
     edits: std.ArrayListUnmanaged(usize) = .empty, // indices into ALL_EDITS
     is_principal: bool = false,
@@ -340,7 +340,7 @@ pub const MceDiagnosisCode = struct {
 };
 
 pub const MceProcedureCode = struct {
-    code: [8]u8 = [_]u8{0} ** 8,
+    code: [8]u8 = @splat(0),
     attributes: std.ArrayListUnmanaged(Attribute) = .empty,
     edits: std.ArrayListUnmanaged(usize) = .empty,
 
@@ -403,7 +403,7 @@ pub const MceInput = struct {
 pub const MceOutput = struct {
     version: i32 = 0,
     edit_type: EditType = .NONE,
-    edit_counts: [ALL_EDITS.len]u32 = [_]u32{0} ** ALL_EDITS.len,
+    edit_counts: [ALL_EDITS.len]u32 = @splat(0),
 
     pub fn increment(self: *MceOutput, edit_index: usize) void {
         self.edit_counts[edit_index] += 1;

@@ -3,7 +3,7 @@
 **High-performance CMS claim processing tools written in Zig with Python bindings.**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Zig](https://img.shields.io/badge/Zig-0.16-orange.svg)](https://ziglang.org)
+[![Zig](https://img.shields.io/badge/Zig-0.17-orange.svg)](https://ziglang.org)
 [![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://python.org)
 [![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://Bedrock-Billing.github.io/mz-drg/)
 
@@ -321,7 +321,7 @@ Both engines share the same shared library and data files. The grouping pipeline
 
 ### Prerequisites
 
-- **Zig 0.16+** — [download](https://ziglang.org/download/) or via package manager
+- **Zig 0.17+** — [download](https://ziglang.org/download/) or via package manager
 - **Python 3.11+**
 - **uv** (recommended) or **pip**
 

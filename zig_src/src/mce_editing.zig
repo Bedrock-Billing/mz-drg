@@ -11,7 +11,7 @@ const MceProcedureCode = mce_enums.MceProcedureCode;
 // --- Edit Counter ---
 
 pub const EditCounter = struct {
-    counts: [mce_enums.ALL_EDITS.len]u32 = [_]u32{0} ** mce_enums.ALL_EDITS.len,
+    counts: [mce_enums.ALL_EDITS.len]u32 = @splat(0),
     pdx_suppressions: []const usize = &.{},
     sdx_suppressions: []const usize = &.{},
     sg_suppressions: []const usize = &.{},

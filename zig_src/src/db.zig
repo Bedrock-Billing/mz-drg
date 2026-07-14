@@ -1,7 +1,5 @@
 const std = @import("std");
-const lmdb = @cImport({
-    @cInclude("lmdb.h");
-});
+const lmdb = @import("lmdb");
 
 pub const Database = struct {
     env: ?*lmdb.MDB_env,
@@ -23,17 +21,17 @@ pub const Database = struct {
 
         // LMDB map size (100MB)
         try expectSuccess(lmdb.mdb_env_set_mapsize(env, 100 * 1024 * 1024));
-        
+
         // Open with MDB_RDONLY, MDB_NOSUBDIR (single file), and MDB_NOLOCK.
         // MDB_NOLOCK is safe for read-only access.
-        const path_z = try std.heap.c_allocator.dupeZ(u8, path);
+        const path_z = try std.heap.c_allocator.dupeSentinel(u8, path, 0);
         defer std.heap.c_allocator.free(path_z);
-        
+
         try expectSuccess(lmdb.mdb_env_open(env, path_z, lmdb.MDB_RDONLY | lmdb.MDB_NOSUBDIR | lmdb.MDB_NOLOCK, 0o664));
 
         var dbi: lmdb.MDB_dbi = 0;
         var txn: ?*lmdb.MDB_txn = null;
-        
+
         // Start a long-lived read-only transaction
         try expectSuccess(lmdb.mdb_txn_begin(env, null, lmdb.MDB_RDONLY, &txn));
         errdefer lmdb.mdb_txn_abort(txn);
@@ -60,13 +58,13 @@ pub const Database = struct {
         var padded_key: [64]u8 = undefined;
         if (key.len > padded_key.len) return error.KeyTooLong;
         @memcpy(padded_key[0..key.len], key);
-        
+
         const padding_needed = (8 - (key.len % 8)) % 8;
         const padded_len = key.len + padding_needed;
         if (padding_needed > 0) {
             @memset(padded_key[key.len..padded_len], 0);
         }
-        
+
         var k = lmdb.MDB_val{ .mv_size = padded_len, .mv_data = &padded_key };
         var v = lmdb.MDB_val{ .mv_size = 0, .mv_data = null };
 

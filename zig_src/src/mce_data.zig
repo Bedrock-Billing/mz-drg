@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("common.zig");
+const db = @import("db.zig");
 
 // --- Constants ---
 
@@ -18,7 +19,7 @@ pub const CodeMasterHeader = extern struct {
     entries_offset: u32,
     strings_offset: u32,
     termination_date: i32,
-    _pad: [12]u8 = [_]u8{0} ** 12,
+    _pad: [12]u8 = @splat(0),
 };
 
 pub const CodeMasterEntry = extern struct {
@@ -27,7 +28,7 @@ pub const CodeMasterEntry = extern struct {
     date_end: i32,
     flags_offset: u32,
     flags_count: u16,
-    _pad: [2]u8 = [_]u8{0} ** 2,
+    _pad: [2]u8 = @splat(0),
 
     pub fn getCode(self: *align(1) const CodeMasterEntry) []const u8 {
         var len: usize = 0;
@@ -211,7 +212,7 @@ pub const AgeRangeHeader = extern struct {
     num_entries: u32,
     entries_offset: u32,
     strings_offset: u32,
-    _pad: [16]u8 = [_]u8{0} ** 16,
+    _pad: [16]u8 = @splat(0),
 };
 
 pub const AgeRangeEntry = extern struct {
@@ -298,7 +299,7 @@ pub const DischargeStatusHeader = extern struct {
     magic: u32,
     num_entries: u32,
     entries_offset: u32,
-    _pad: [20]u8 = [_]u8{0} ** 20,
+    _pad: [20]u8 = @splat(0),
 };
 
 pub const DischargeStatusEntry = extern struct {
@@ -366,7 +367,7 @@ test "CodeMasterEntry code extraction" {
     try std.testing.expectEqualStrings("A001", entry.getCode());
 
     // Test empty code
-    entry.code = [_]u8{0} ** 8;
+    entry.code = @splat(0);
     try std.testing.expectEqualStrings("", entry.getCode());
 }
 
@@ -421,12 +422,20 @@ test "FlagIterator" {
 }
 
 test "CodeMasterData real file lookup" {
-    const data_dir = "../data/";
-    const i10dx_path = data_dir ++ "mce_i10dx_master.bin";
+    var database = db.Database.init("../data/msdrg.mdb") catch |err| {
+        std.debug.print("Skipping: could not open LMDB: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    defer database.deinit();
 
-    var dx_data = CodeMasterData.init(i10dx_path) catch |err| {
-        std.debug.print("Skipping: could not load {s}: {}\n", .{ i10dx_path, err });
-        return;
+    const i10dx_data = database.get("mce_i10dx_master") catch |err| {
+        std.debug.print("Skipping: could not load mce_i10dx_master: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+
+    var dx_data = CodeMasterData.initWithData(i10dx_data) catch |err| {
+        std.debug.print("Skipping: invalid mce_i10dx_master data: {}\n", .{err});
+        return error.SkipZigTest;
     };
     defer dx_data.deinit();
 
@@ -459,12 +468,20 @@ test "CodeMasterData real file lookup" {
 }
 
 test "AgeRangeData real file" {
-    const data_dir = "../data/";
-    const age_path = data_dir ++ "mce_age_ranges.bin";
+    var database = db.Database.init("../data/msdrg.mdb") catch |err| {
+        std.debug.print("Skipping: could not open LMDB: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    defer database.deinit();
 
-    var age_data = AgeRangeData.init(age_path) catch |err| {
-        std.debug.print("Skipping: could not load {s}: {}\n", .{ age_path, err });
-        return;
+    const age_data_blob = database.get("mce_age_ranges") catch |err| {
+        std.debug.print("Skipping: could not load mce_age_ranges: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+
+    var age_data = AgeRangeData.initWithData(age_data_blob) catch |err| {
+        std.debug.print("Skipping: invalid mce_age_ranges data: {}\n", .{err});
+        return error.SkipZigTest;
     };
     defer age_data.deinit();
 
@@ -487,12 +504,20 @@ test "AgeRangeData real file" {
 }
 
 test "DischargeStatusData real file" {
-    const data_dir = "../data/";
-    const ds_path = data_dir ++ "mce_discharge_status.bin";
+    var database = db.Database.init("../data/msdrg.mdb") catch |err| {
+        std.debug.print("Skipping: could not open LMDB: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    defer database.deinit();
 
-    var ds_data = DischargeStatusData.init(ds_path) catch |err| {
-        std.debug.print("Skipping: could not load {s}: {}\n", .{ ds_path, err });
-        return;
+    const ds_data_blob = database.get("mce_discharge_status") catch |err| {
+        std.debug.print("Skipping: could not load mce_discharge_status: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+
+    var ds_data = DischargeStatusData.initWithData(ds_data_blob) catch |err| {
+        std.debug.print("Skipping: invalid mce_discharge_status data: {}\n", .{err});
+        return error.SkipZigTest;
     };
     defer ds_data.deinit();
 

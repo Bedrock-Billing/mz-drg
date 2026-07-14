@@ -61,7 +61,7 @@ test "CodeMapData lookup" {
 
     const writeEntry = struct {
         fn call(f: std.Io.File, code: []const u8, v_start: i32, v_end: i32, value: i32) !void {
-            var code_buf: [8]u8 = [_]u8{0} ** 8;
+            var code_buf: [8]u8 = @splat(0);
             @memcpy(code_buf[0..code.len], code);
             try std.Io.File.writeStreamingAll(f, std.testing.io, &code_buf);
 

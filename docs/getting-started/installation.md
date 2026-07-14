@@ -27,7 +27,7 @@ Prebuilt wheels are available for:
 
 ## From source
 
-Building from source requires **Zig 0.16+** at build time. Install from [ziglang.org/download](https://ziglang.org/download/) and make sure `zig` is on your `PATH`.
+Building from source requires **Zig 0.17+** at build time. Install from [ziglang.org/download](https://ziglang.org/download/) and make sure `zig` is on your `PATH`.
 
 ```bash
 git clone https://github.com/Bedrock-Billing/mz-drg.git
@@ -64,15 +64,15 @@ python -c "import msdrg; print(msdrg.__version__)"
 ## Troubleshooting
 
 ??? question "ImportError: shared library not found"
-    The prebuilt wheel may not exist for your platform. Install from source (requires Zig 0.16+):
+    The prebuilt wheel may not exist for your platform. Install from source (requires Zig 0.17+):
     ```bash
     pip install msdrg --no-binary msdrg
     ```
 
 ??? question "Zig compilation fails during install"
-    Make sure you have Zig **0.16 or newer**. Older versions are not compatible.
+    Make sure you have Zig **0.17 or newer**. Older versions are not compatible.
     ```bash
-    zig version  # should be 0.16.x or higher
+    zig version  # should be 0.17.x or higher
     ```
 
 ??? question "Data directory not found"

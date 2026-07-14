@@ -1,6 +1,7 @@
 const std = @import("std");
 const mce_data = @import("mce_data.zig");
 const mce_enums = @import("mce_enums.zig");
+const db = @import("db.zig");
 
 // --- Constants ---
 
@@ -138,8 +139,20 @@ test "validateAge" {
 }
 
 test "validateCode real file" {
-    const data_dir = "../data/";
-    var dx_data = mce_data.CodeMasterData.init(data_dir ++ "mce_i10dx_master.bin") catch return;
+    var database = db.Database.init("../data/msdrg.mdb") catch |err| {
+        std.debug.print("Skipping: could not open LMDB: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    defer database.deinit();
+
+    const dx_blob = database.get("mce_i10dx_master") catch |err| {
+        std.debug.print("Skipping: could not load mce_i10dx_master: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    var dx_data = mce_data.CodeMasterData.initWithData(dx_blob) catch |err| {
+        std.debug.print("Skipping: invalid mce_i10dx_master data: {}\n", .{err});
+        return error.SkipZigTest;
+    };
     defer dx_data.deinit();
 
     // Empty code is "valid"
@@ -157,15 +170,34 @@ test "validateCode real file" {
     try std.testing.expect(!try validateCode("Z@4481", &dx_data, 20250101));
 
     // Verify with SG master too
-    var sg_data = mce_data.CodeMasterData.init(data_dir ++ "mce_i10sg_master.bin") catch return;
+    const sg_blob = database.get("mce_i10sg_master") catch |err| {
+        std.debug.print("Skipping: could not load mce_i10sg_master: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    var sg_data = mce_data.CodeMasterData.initWithData(sg_blob) catch |err| {
+        std.debug.print("Skipping: invalid mce_i10sg_master data: {}\n", .{err});
+        return error.SkipZigTest;
+    };
     defer sg_data.deinit();
     try std.testing.expect(!try validateCode("ZZZZZZZ", &sg_data, 20250101));
     try std.testing.expect(!try validateCode("Z@4481", &sg_data, 20250101));
 }
 
 test "loadAttributes real file" {
-    const data_dir = "../data/";
-    var dx_data = mce_data.CodeMasterData.init(data_dir ++ "mce_i10dx_master.bin") catch return;
+    var database = db.Database.init("../data/msdrg.mdb") catch |err| {
+        std.debug.print("Skipping: could not open LMDB: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    defer database.deinit();
+
+    const dx_blob = database.get("mce_i10dx_master") catch |err| {
+        std.debug.print("Skipping: could not load mce_i10dx_master: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    var dx_data = mce_data.CodeMasterData.initWithData(dx_blob) catch |err| {
+        std.debug.print("Skipping: invalid mce_i10dx_master data: {}\n", .{err});
+        return error.SkipZigTest;
+    };
     defer dx_data.deinit();
 
     var result: [10]mce_enums.Attribute = undefined;
@@ -183,8 +215,20 @@ test "loadAttributes real file" {
 }
 
 test "validateDischargeStatus real file" {
-    const data_dir = "../data/";
-    var ds_data = mce_data.DischargeStatusData.init(data_dir ++ "mce_discharge_status.bin") catch return;
+    var database = db.Database.init("../data/msdrg.mdb") catch |err| {
+        std.debug.print("Skipping: could not open LMDB: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    defer database.deinit();
+
+    const ds_blob = database.get("mce_discharge_status") catch |err| {
+        std.debug.print("Skipping: could not load mce_discharge_status: {}\n", .{err});
+        return error.SkipZigTest;
+    };
+    var ds_data = mce_data.DischargeStatusData.initWithData(ds_blob) catch |err| {
+        std.debug.print("Skipping: invalid mce_discharge_status data: {}\n", .{err});
+        return error.SkipZigTest;
+    };
     defer ds_data.deinit();
 
     try std.testing.expect(try validateDischargeStatus(1, &ds_data, 20250101));

@@ -469,7 +469,7 @@ test "MceComponent init/deinit" {
 
     var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
-        return;
+        return error.SkipZigTest;
     };
     defer comp.deinit();
 
@@ -483,7 +483,7 @@ test "MceComponent process valid claim" {
 
     var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
-        return;
+        return error.SkipZigTest;
     };
     defer comp.deinit();
 
@@ -509,7 +509,7 @@ test "MceComponent process E-code as PDX" {
 
     var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
-        return;
+        return error.SkipZigTest;
     };
     defer comp.deinit();
 
@@ -536,7 +536,7 @@ test "MceComponent process sex conflict" {
 
     var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
-        return;
+        return error.SkipZigTest;
     };
     defer comp.deinit();
 
@@ -563,7 +563,7 @@ test "MceComponent process age conflict" {
 
     var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
-        return;
+        return error.SkipZigTest;
     };
     defer comp.deinit();
 
@@ -588,7 +588,7 @@ test "MceComponent process unacceptable PDX" {
 
     var comp = MceComponent.init(data_path, allocator) catch |err| {
         std.debug.print("Skipping: {}\n", .{err});
-        return;
+        return error.SkipZigTest;
     };
     defer comp.deinit();
 

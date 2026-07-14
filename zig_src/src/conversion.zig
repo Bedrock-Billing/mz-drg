@@ -222,7 +222,7 @@ pub const ConversionData = struct {
         alloc: std.mem.Allocator,
     ) !?[:0]const u8 {
         // Pack code into 8-byte format, stripping dots and uppercasing
-        var code: [8]u8 = [_]u8{0} ** 8;
+        var code: [8]u8 = @splat(0);
         var pos: usize = 0;
         for (code_str) |c| {
             if (c == '.') continue;

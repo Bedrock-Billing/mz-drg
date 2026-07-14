@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Zig 0.16+** — [download](https://ziglang.org/download/)
+- **Zig 0.17+** — [download](https://ziglang.org/download/)
 - **Python 3.11+**
 - **uv** (recommended) or **pip**
 
