@@ -30,7 +30,7 @@ DATA_BIN_DIR = os.path.join(SCRIPT_DIR, "..", "data", "bin")
 
 # MS-DRG versions we support
 # (version, icd_year) — we need conversion tables between adjacent icd_years
-SUPPORTED_YEARS = [2023, 2024, 2025, 2026]
+SUPPORTED_YEARS = [2023, 2024, 2025, 2026, 2027]
 
 # Direction constants (must match Zig conversion.zig)
 DIRECTION_FORWARD = 0  # newer → older

@@ -56,8 +56,10 @@ Convert between MS-DRG version numbers and ICD-10 fiscal years:
 
 ```python
 IcdConverter.version_to_year(431)   # 2026
+IcdConverter.version_to_year(440)   # 2027
 IcdConverter.version_to_year(420)   # 2025
 IcdConverter.year_to_version(2026)  # 431
+IcdConverter.year_to_version(2027)  # 440
 IcdConverter.year_to_version(2025)  # 421
 ```
 

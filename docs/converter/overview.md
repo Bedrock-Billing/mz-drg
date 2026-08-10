@@ -86,6 +86,7 @@ python scripts/compile_icd_conversions.py
 | 410 / 411 | FY 2024 |
 | 420 / 421 | FY 2025 |
 | 430 / 431 | FY 2026 |
+| 440 | FY 2027 |
 
 !!! note
     The converter is an optional component. If conversion binary files are not present, the grouper works normally without conversion. When `source_icd_version` is omitted from the claim, no conversion occurs.

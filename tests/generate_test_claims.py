@@ -34,6 +34,7 @@ GROUPERS = {
     421: {"discharge_date": 20250401},
     430: {"discharge_date": 20251001},
     431: {"discharge_date": 20260401},
+    440: {"discharge_date": 20261001},
 }
 
 # All valid CMS discharge status codes (from MsdrgDischargeStatus.java)

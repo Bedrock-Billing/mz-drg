@@ -21,7 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import mce_pb2
 
-DEFAULT_MCE_BIN = "java_code/mce/MCE-2.0-43.1.0.0-sources/mce.bin"
+DEFAULT_MCE_BIN = "java_code/mce/MCE-2.0-44.0.0.1-sources/mce.bin"
 
 
 def date_to_int(date_str: str, termination: str) -> int:

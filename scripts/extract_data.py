@@ -5,18 +5,17 @@ import os
 import csv
 import sys
 import json
-from java.lang.reflect import Modifier
 
 # Define paths
 JAR_DIR = os.path.join(os.getcwd(), "jars")
 DATA_DIR = os.path.join(os.getcwd(), "data")
 jars = [
-    "msdrg-binary-access-1.5.0.jar",
-    "protobuf-java-3.22.2.jar",
-    "msdrg-model-v2-2.11.0.jar",
+    "msdrg-binary-access-1.6.3.jar",
+    "protobuf-java-3.25.5.jar",
+    "msdrg-model-v2-2.12.2.jar",
     "gfc-base-api-3.4.9.jar",
     "gfc-base-factory-3.4.9.jar",
-    "msdrg-core-43.1.0.0.jar",
+    "msdrg-core-44.0.0.3.jar",
 ]
 
 classpath = [os.path.join(JAR_DIR, jar) for jar in jars]
@@ -26,10 +25,22 @@ for cp in classpath:
     print(f"  {cp}")
 
 # Start JVM
+# JPype reflects over internal JDK collections (e.g. AbstractList.modCount) when
+# serializing values from CMS' DataBlob. Modern JDKs (9+) require these packages
+# to be explicitly opened to the unnamed module for setAccessible() to succeed.
 try:
-    jpype.startJVM(classpath=classpath)
+    jpype.startJVM(
+        "-Djava.awt.headless=true",
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+        classpath=classpath,
+    )
 except OSError:
     print("JVM already started")
+
+
+Modifier = JClass("java.lang.reflect.Modifier")
 
 
 # Import classes

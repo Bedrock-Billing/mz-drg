@@ -22,6 +22,7 @@ VERSION_TO_YEAR: dict[int, int] = {
     421: 2025,
     430: 2026,
     431: 2026,
+    440: 2027,
 }
 
 YEAR_TO_VERSION: dict[int, int] = {
@@ -29,6 +30,7 @@ YEAR_TO_VERSION: dict[int, int] = {
     2024: 411,
     2025: 421,
     2026: 431,
+    2027: 440,
 }
 
 

@@ -218,6 +218,7 @@ The `tie_breaker` field controls how the grouper resolves attribute matches when
 | 421     | FY 2025 (Apr 2025 – Sep 2025) |
 | 430     | FY 2026 (Oct 2025 – Apr 2026) |
 | 431     | FY 2026 (Apr 2026 – Sep 2026) |
+| 440     | FY 2027 (Oct 2026 – Mar 2027) |
 
 ## Medicare Code Editor (MCE)
 
@@ -478,4 +479,3 @@ Full documentation is available at **[Bedrock-Billing.github.io/mz-drg](https://
 ## Acknowledgments
 
 This project is intended for healthcare IT professionals who need fast, embeddable, and auditable claim processing tools.
-

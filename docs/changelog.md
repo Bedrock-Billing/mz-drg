@@ -4,6 +4,45 @@ All notable changes to this project are documented here. This project adheres to
 
 ---
 
+## v1.2.0 — 2026-08-09
+
+### Added
+
+- :sparkles: **CMS MS-DRG v44 (FY2027) Support** — Full support for the v44 grouper release (FY2027), including updated ICD-10-CM/PCS codes, DRG formulas, HAC rules, and cluster definitions.
+- :sparkles: **CMS MCE v44 Support** — Updated MCE reference data for the FY2027 code set and v44 effective period. The MCE Java implementation was source-compatible with v43.1; the changes are data-only.
+- :sparkles: **Flag-Level Comparison Harness** — `tests/compare_groupers.py` now supports `--compare-flags` to validate per-code outputs (severity, DRG impact, POA error, HAC usage, grouper flags) against the reference Java implementation. Includes `--flag-report-limit` and `--no-compare-flags` options.
+- :sparkles: **HAC Usage Flags for Procedures** — New `hac_usage` field on procedure output exposes HAC usage enums (e.g., `HAC_08`, `HAC_10`–`HAC_14`). Added to Zig `ProcedureOutput`, Python `ProcedureOutput`, and comparison logic.
+- :sparkles: **HAC Output Fidelity** — PDX/SDX `hacs` field now emits the processed `hacs_flags` list (deduped, version-dependent zeroing, fallback rules) matching the Java `MsdrgDiagnosisFlag` output, instead of raw evaluated HACs.
+- :sparkles: **Comprehensive Flag Comparison Tests** — New `tests/test_flag_comparison.py` with 19 pure-Python unit tests covering canonicalization, diff logic, normalization, and version-aware HAC behavior. Tests run without JVM.
+
+### Changed
+
+- :arrows_counterclockwise: **Version-Aware Cluster Lookup** — `cluster_info.bin` now stores per-row version ranges (`version_start`/`version_end`). The `cluster_map` stores all variant indices per cluster name; `MsdrgClusters` filters by `appliesToVersion` at read time. Fixes latent bug where v440 cluster data (e.g., Z@5036 suppression MDCs {10,29}) was incorrectly used for v431 claims (should be {8,10,29}).
+- :arrows_counterclockwise: **CMS v44 HAC Behavior Updates** — Implemented version-conditional HAC logic (v440+): EXEMPT hospitals now evaluate HAC formulas before overriding to exempt; procedure HAC flagging no longer requires `HAC_CRITERIA_MET`; HAC numbers retained (not zeroed) for `CRITERIA_NOT_MET` (POA Y/W) and `NOT_APPLICABLE_EXEMPT` cases.
+- :arrows_counterclockwise: **HAC Output Normalization** — PDX/SDX `hacs` field now emits `hacs_flags` (processed list with dedup, version-dependent zeroing, fallback) matching Java `MsdrgDiagnosisFlag`, instead of raw evaluated HACs.
+- :arrows_counterclockwise: **ProcedureAttributeProcessor HAC Usage** — Zig now propagates cluster MDC restrictions to constituent procedures' attributes, matching Java's `setMdcSuppression` propagation.
+
+### Fixed
+
+- :bug: **Cluster Version Mismatch Bug** — Fixed DRG 464 vs 467 misassignment for claims involving cluster Z@5036 (knee/hip revision) at v431. Root cause: Zig read v440 cluster row (suppression {10,29}) instead of v431 row (suppression {8,10,29}) due to missing version filtering in cluster lookup. Resulted in `graft` attribute not being suppressed in MDC 8, causing incorrect DRG 464 assignment.
+- :bug: **Python 3.14 Compatibility** — Fixed `is` keyword conflict in `compare_groupers.py` (`code.is(flag)` → `getattr(code, "is")(flag)`); fixed `jpype` import ordering; added `--add-opens` JVM flags for modern JDK module encapsulation.
+- :bug: **Zig Test Cache Staleness** — Resolved intermittent `zig build test` failures caused by stale LMDB handles after `package_lmdb.py` rebuild.
+
+### Performance
+
+- :rocket: **Zig 0.17.0 Toolchain** — Faster compile times and improved runtime performance via updated stdlib and compiler optimizations.
+
+### Internal
+
+- :wrench: **Test Infrastructure Overhaul** — Added `tests/test_flag_comparison.py` (19 pure-Python tests, no JVM); `tests/test_flag_comparison.py` uses fixture-based module loading with clean `sys.modules` isolation; `compare_groupers.py` `--compare-flags` defaults on with `--no-compare-flags` opt-out; `--flag-report-limit` controls per-claim diff verbosity.
+- :wrench: **Data Pipeline Updates** — `compile_clusters.py` now writes version ranges per cluster row and stores all variant indices in map; `extract_data.py` updated for v44 jars (msdrg-core-44.0.0.3, model-v2-2.12.2, etc.) and `--add-opens` JVM flags; `generate_test_claims.py` includes v440 claims; `test_claims.json` regenerated (41M, 40 claims per version across v400–v440).
+
+## v1.1.0 — 2026-08-05
+
+### Changed
+
+- :arrow_up: **Zig 0.17.0** — Updated toolchain from Zig 0.16.0 to 0.17.0 (development snapshot). Includes stdlib updates, improved build times, and fixes for Python 3.14 compatibility.
+
 ## v1.0.0 — 2026-04-21
 
 ### Changed
@@ -19,6 +58,7 @@ All notable changes to this project are documented here. This project adheres to
 
 - :rocket: **AST Formula Caching** — Implemented a thread-safe global cache for parsed DRG formulas. Evaluates formulas up to 10× faster by avoiding redundant lexing and parsing per claim.
 - **Double-Checked Locking** — Optimized the AST cache with blocking `RwLock` and double-checked locking patterns to minimize thread contention during warmup.
+
 
 ## v0.1.10 — 2026-04-06
 

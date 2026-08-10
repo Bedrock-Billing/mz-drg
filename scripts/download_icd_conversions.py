@@ -7,7 +7,7 @@ from zipfile import ZipFile
 
 import requests
 
-YEAR = 2026
+YEAR = 2027
 
 logger = logging.getLogger(__name__)
 

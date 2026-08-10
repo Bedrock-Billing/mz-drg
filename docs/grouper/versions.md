@@ -10,8 +10,9 @@
 | 421 | FY 2025 (Apr 2025 – Sep 2025) |
 | 430 | FY 2026 (Oct 2025 – Apr 2026) |
 | 431 | FY 2026 (Apr 2026 – Sep 2026) |
+| 440 | FY 2027 (Oct 2026 – Mar 2027) |
 
 Pass the version number in the claim's `version` field.
 
 !!! note
-    The grouper engine code is identical across all versions. Version differences come from the binary data files (diagnosis definitions, DRG formulas, etc.). New versions only require recompiling the data.
+    Most version differences come from the binary data files (diagnosis definitions, DRG formulas, etc.). CMS v44 also introduced version-specific HAC processing behavior, which is gated in the engine by the requested grouper version.

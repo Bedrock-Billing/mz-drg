@@ -47,6 +47,9 @@ pub const Cluster = struct {
     data_ptr: [*]const u8,
     limit: [*]const u8,
 
+    // Entry layout: name_off u32, name_len u32, version_start i32,
+    // version_end i32, supp_count u8, supp_mdcs..., choice_count u8, choices...
+
     pub fn getName(self: Cluster) []const u8 {
         if (@intFromPtr(self.data_ptr) + 8 > @intFromPtr(self.limit)) return "";
         const name_offset = std.mem.readInt(u32, self.data_ptr[0..4], .little);
@@ -55,25 +58,45 @@ pub const Cluster = struct {
         return self.base_ptr[name_offset .. name_offset + len];
     }
 
+    /// Grouper version at which this entry becomes valid (inclusive).
+    pub fn versionStart(self: Cluster) i32 {
+        if (@intFromPtr(self.data_ptr) + 16 > @intFromPtr(self.limit)) return 0;
+        return std.mem.readInt(i32, self.data_ptr[8..12], .little);
+    }
+
+    /// Last grouper version at which this entry is valid (inclusive).
+    pub fn versionEnd(self: Cluster) i32 {
+        if (@intFromPtr(self.data_ptr) + 16 > @intFromPtr(self.limit)) return 0;
+        return std.mem.readInt(i32, self.data_ptr[12..16], .little);
+    }
+
+    /// Whether this entry applies to the given grouper version. CMS publishes
+    /// multiple version-range rows per cluster name whose data can differ
+    /// (e.g. v44 changed many clusters' suppression MDCs), so the read path
+    /// must select the row matching the claim's grouper version.
+    pub fn appliesToVersion(self: Cluster, version: i32) bool {
+        return version >= self.versionStart() and version <= self.versionEnd();
+    }
+
     pub fn getSuppressionMdcs(self: Cluster) []const u8 {
-        // Skip name offset (4) and len (4)
-        if (@intFromPtr(self.data_ptr) + 9 > @intFromPtr(self.limit)) return &.{};
-        const ptr = self.data_ptr + 8;
+        // Skip name offset (4) + len (4) + version_start (4) + version_end (4)
+        if (@intFromPtr(self.data_ptr) + 17 > @intFromPtr(self.limit)) return &.{};
+        const ptr = self.data_ptr + 16;
         const count = ptr[0];
         if (@intFromPtr(ptr) + 1 + count > @intFromPtr(self.limit)) return &.{};
         return ptr[1 .. 1 + count];
     }
 
     pub fn getChoices(self: Cluster) ChoiceIterator {
-        // Skip name offset (4) and len (4)
-        if (@intFromPtr(self.data_ptr) + 9 > @intFromPtr(self.limit)) return ChoiceIterator{
+        // Skip name offset (4) + len (4) + version_start (4) + version_end (4)
+        if (@intFromPtr(self.data_ptr) + 17 > @intFromPtr(self.limit)) return ChoiceIterator{
             .base_ptr = self.base_ptr,
             .ptr = self.data_ptr, // Dummy
             .count = 0,
             .index = 0,
             .limit = self.limit,
         };
-        const ptr = self.data_ptr + 8;
+        const ptr = self.data_ptr + 16;
         const supp_count = ptr[0];
         const choice_count_ptr = ptr + 1 + supp_count;
 
@@ -208,9 +231,12 @@ test "ClusterInfoData accessors" {
     try writeU32(file, 24); // Offset to Cluster 1
 
     // Cluster 1 Data (at 24)
-    // Name offset (4), Name len (4), supp_count(1), supp_mdc(1), choice_count(1)
+    // Name offset (4), Name len (4), version_start (4), version_end (4),
+    // supp_count(1), supp_mdc(1), choice_count(1)
     try writeU32(file, 100); // Name offset
     try writeU32(file, 5); // Name len
+    try writeU32(file, 400); // version_start
+    try writeU32(file, 431); // version_end
     try writeU8(file, 1); // supp_count
     try writeU8(file, 5); // supp_mdc
     try writeU8(file, 1); // choice_count
@@ -234,6 +260,14 @@ test "ClusterInfoData accessors" {
     const supp = cluster.getSuppressionMdcs();
     try std.testing.expectEqual(@as(usize, 1), supp.len);
     try std.testing.expectEqual(@as(u8, 5), supp[0]);
+
+    // Version range is read back and drives appliesToVersion
+    try std.testing.expectEqual(@as(i32, 400), cluster.versionStart());
+    try std.testing.expectEqual(@as(i32, 431), cluster.versionEnd());
+    try std.testing.expect(cluster.appliesToVersion(431));
+    try std.testing.expect(cluster.appliesToVersion(400));
+    try std.testing.expect(!cluster.appliesToVersion(440));
+    try std.testing.expect(!cluster.appliesToVersion(399));
 
     var choices = cluster.getChoices();
     const choice = choices.next().?;

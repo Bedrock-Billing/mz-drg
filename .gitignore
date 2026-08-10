@@ -39,11 +39,16 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+data/csv/
+data/bin/
+data/*.bin
+data/*.db
+java_code/
 
 # Build artifacts inside package
 msdrg/_lib/
 msdrg/data/
-
+java_code/
 # MkDocs
 site/
 
@@ -55,7 +60,7 @@ zig-out/
 *.dylib
 *.dll
 *.exe
-*.wasm
+*.was
 .zig-cache
 
 # IDE

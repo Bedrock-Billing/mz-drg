@@ -24,7 +24,7 @@ The `group()` method accepts a dictionary with the following fields:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `version` | int | Yes | MS-DRG version (400-431). See [Versions](versions.md). |
+| `version` | int | Yes | MS-DRG version (400-440). See [Versions](versions.md). |
 | `age` | int | Yes | Patient age in years (0-124) |
 | `sex` | int | Yes | `0`=Male, `1`=Female, `2`=Unknown |
 | `discharge_status` | int | Yes | CMS discharge status code (see below) |

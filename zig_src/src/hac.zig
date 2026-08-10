@@ -192,7 +192,11 @@ pub const MsdrgHacProcessor = struct {
         const allocator = context.allocator;
         const hospital_status = context.runtime.poa_reporting_exempt;
 
-        if (hospital_status == .EXEMPT) {
+        // CMS v44 behavior change: for versions < 440, EXEMPT hospitals skip HAC
+        // evaluation entirely. For versions >= 440, EXEMPT hospitals run full HAC
+        // evaluation first, then all statuses are overridden to
+        // HAC_NOT_APPLICABLE_EXEMPT (procedures keep their evaluated HAC usage flags).
+        if (hospital_status == .EXEMPT and self.version < 440) {
             // Hospital is exempt from POA reporting — skip HAC processing entirely
             for (data.sdx_codes.items) |*sdx| {
                 if (sdx.hacs.items.len == 0) continue;
@@ -208,8 +212,20 @@ pub const MsdrgHacProcessor = struct {
             };
         }
 
-        // NON_EXEMPT or UNKNOWN — process HACs
+        // NON_EXEMPT or UNKNOWN — process HACs (also EXEMPT for v440+)
         try self.processHospitalAcquiredCondition(context, hospital_status);
+
+        if (hospital_status == .EXEMPT) {
+            // v440+: evaluation already ran — override all HAC statuses to exempt
+            for (data.sdx_codes.items) |*sdx| {
+                if (sdx.hacs.items.len == 0) continue;
+                sdx.poa_error_code_flag = .HOSPITAL_EXEMPT;
+                for (sdx.hacs.items) |*hac| {
+                    hac.hac_status = .HAC_NOT_APPLICABLE_EXEMPT;
+                }
+            }
+            try self.updateHacListAfterEvaluation(&data.principal_dx, &data.sdx_codes, allocator);
+        }
 
         // Rebuild mask after HAC modifications to SDX codes
         data.deinitMask();
@@ -304,7 +320,11 @@ pub const MsdrgHacProcessor = struct {
                     }
                 }
 
-                if (!is_proc_hac or hac.hac_status != .HAC_CRITERIA_MET) continue;
+                if (!is_proc_hac) continue;
+                // CMS v44 behavior change: versions < 440 only flag procedures when
+                // the HAC criteria was met; v440+ flags procedures for proc-HAC
+                // numbers regardless of criteria status.
+                if (self.version < 440 and hac.hac_status != .HAC_CRITERIA_MET) continue;
 
                 for (data.procedure_codes.items) |*proc| {
                     const hac_num = hac.hac_number;
@@ -441,7 +461,11 @@ pub const MsdrgHacProcessor = struct {
     }
 
     fn updateHacListAfterEvaluation(self: *const MsdrgHacProcessor, pdx_opt: *?models.DiagnosisCode, sdx_codes: *std.ArrayList(models.DiagnosisCode), allocator: std.mem.Allocator) !void {
-        _ = self;
+        // CMS v44 behavior change: versions < 440 report HAC number 0 in the flag
+        // output for CRITERIA_NOT_MET (POA Y/W) and NOT_APPLICABLE_EXEMPT entries;
+        // v440+ keeps the real HAC number. The !criteria_met fallback still zeroes
+        // in all versions.
+        const zero_hac_number = self.version < 440;
         for (sdx_codes.items) |*sdx| {
             var contains_six = false;
             var criteria_met = false;
@@ -466,7 +490,7 @@ pub const MsdrgHacProcessor = struct {
                 }
                 if (hac.hac_status == .HAC_CRITERIA_NOT_MET and (sdx.poa == 'W' or sdx.poa == 'Y')) {
                     var h = hac.*;
-                    h.hac_number = 0;
+                    if (zero_hac_number) h.hac_number = 0;
                     try update_hac_list.append(allocator, h);
                     criteria_met = true;
                     break;
@@ -478,7 +502,7 @@ pub const MsdrgHacProcessor = struct {
                 }
                 if (hac.hac_status == .HAC_NOT_APPLICABLE_EXEMPT) {
                     var h = hac.*;
-                    h.hac_number = 0;
+                    if (zero_hac_number) h.hac_number = 0;
                     try update_hac_list.append(allocator, h);
                     criteria_met = true;
                 }
@@ -634,4 +658,244 @@ test "MsdrgHacProcessor execution" {
     try std.testing.expectEqual(@as(usize, 1), processed_dx.hacs_flags.items.len);
     try std.testing.expectEqual(models.HacUsage.HAC_CRITERIA_MET, processed_dx.hacs_flags.items[0].hac_status);
     try std.testing.expectEqual(models.PoaErrorCode.POA_RECOGNIZED_NOT_POA, processed_dx.poa_error_code_flag);
+}
+
+// --- CMS v44 HAC behavior tests ---
+
+/// Writes an empty description file and a formula file with one entry:
+/// hac_id → single formula "TEST_ATTR", valid for [version_start, version_end].
+fn writeHacTestFiles(desc_filename: []const u8, formula_filename: []const u8, hac_id: u16, version_start: u32, version_end: u32) !void {
+    const file_desc = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, desc_filename, .{ .read = true });
+    defer std.Io.File.close(file_desc, std.testing.io);
+    const file_formula = try std.Io.Dir.createFile(std.Io.Dir.cwd(), std.testing.io, formula_filename, .{ .read = true });
+    defer std.Io.File.close(file_formula, std.testing.io);
+
+    const writeU32 = struct {
+        fn call(f: std.Io.File, v: u32) !void {
+            var b: [4]u8 = undefined;
+            std.mem.writeInt(u32, &b, v, .little);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
+        }
+    }.call;
+
+    const writeU16 = struct {
+        fn call(f: std.Io.File, v: u16) !void {
+            var b: [2]u8 = undefined;
+            std.mem.writeInt(u16, &b, v, .little);
+            try std.Io.File.writeStreamingAll(f, std.testing.io, &b);
+        }
+    }.call;
+
+    // Description File (empty)
+    try writeU32(file_desc, 0x48414344);
+    try writeU32(file_desc, 0);
+    try writeU32(file_desc, 16);
+    try writeU32(file_desc, 16);
+
+    // Formula File: header 20 bytes, 1 entry (16 bytes), list data (8 bytes), strings
+    try writeU32(file_formula, 0x48414346);
+    try writeU32(file_formula, 1);
+    try writeU32(file_formula, 20);
+    try writeU32(file_formula, 36);
+    try writeU32(file_formula, 44);
+
+    try writeU16(file_formula, hac_id);
+    try writeU16(file_formula, 1);
+    try writeU32(file_formula, version_start);
+    try writeU32(file_formula, version_end);
+    try writeU32(file_formula, 36);
+
+    try writeU32(file_formula, 44);
+    try writeU32(file_formula, 9);
+
+    try std.Io.File.writeStreamingAll(file_formula, std.testing.io, "TEST_ATTR");
+}
+
+const HacTestFixture = struct {
+    desc_data: HacDescriptionData,
+    formula_data: HacFormulaData,
+    data: models.ProcessingData,
+    ast_cache: formula.AstCache,
+
+    fn init(allocator: std.mem.Allocator, desc_filename: []const u8, formula_filename: []const u8, sdx_poa: u8, hac_number: i32) !HacTestFixture {
+        var desc_data = try HacDescriptionData.init(desc_filename);
+        errdefer desc_data.deinit();
+        var formula_data = try HacFormulaData.init(formula_filename);
+        errdefer formula_data.deinit();
+
+        var data = models.ProcessingData.init(allocator);
+
+        // SDX carrying a proc-HAC number with an attribute that meets the formula
+        var dx = try models.DiagnosisCode.init("A001", sdx_poa);
+        try dx.attributes.append(allocator, models.Attribute{ .list_name = "TEST_ATTR" });
+        try dx.hacs.append(allocator, models.Hac{
+            .hac_number = hac_number,
+            .hac_status = .NOT_ON_HAC_LIST,
+            .hac_list = "hac08",
+            .description = "Test HAC 8",
+        });
+        try data.sdx_codes.append(allocator, dx);
+
+        // Procedure tied to the HAC via its hac08_proc attribute
+        var proc = try models.ProcedureCode.init("0AB1234");
+        try proc.attributes.append(allocator, models.Attribute{ .list_name = "hac08_proc" });
+        try data.procedure_codes.append(allocator, proc);
+
+        data.mask = try grouping.MsdrgMaskBuilder.buildMask(&data, allocator);
+
+        return .{
+            .desc_data = desc_data,
+            .formula_data = formula_data,
+            .data = data,
+            .ast_cache = formula.AstCache.init(allocator),
+        };
+    }
+
+    fn deinit(self: *HacTestFixture, allocator: std.mem.Allocator) void {
+        _ = allocator;
+        self.data.deinit();
+        self.ast_cache.deinit();
+        self.desc_data.deinit();
+        self.formula_data.deinit();
+    }
+};
+
+test "MsdrgHacProcessor EXEMPT v431 skips evaluation and zeroes flag hac number" {
+    const allocator = std.testing.allocator;
+    const desc_filename = "test_hac_desc_ex431.bin";
+    const formula_filename = "test_hac_formula_ex431.bin";
+    try writeHacTestFiles(desc_filename, formula_filename, 8, 400, 431);
+    defer {
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, desc_filename) catch {};
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, formula_filename) catch {};
+    }
+
+    var fixture = try HacTestFixture.init(allocator, desc_filename, formula_filename, 'N', 8);
+    defer fixture.deinit(allocator);
+
+    var processor = MsdrgHacProcessor{
+        .description_data = &fixture.desc_data,
+        .formula_data = &fixture.formula_data,
+        .version = 431,
+    };
+
+    const context = models.ProcessingContext.init(allocator, &fixture.data, .{ .poa_reporting_exempt = .EXEMPT }, &fixture.ast_cache);
+    _ = try MsdrgHacProcessor.execute(&processor, context);
+
+    const sdx = &fixture.data.sdx_codes.items[0];
+    const proc = &fixture.data.procedure_codes.items[0];
+
+    try std.testing.expectEqual(models.HacUsage.HAC_NOT_APPLICABLE_EXEMPT, sdx.hacs.items[0].hac_status);
+    try std.testing.expectEqual(models.PoaErrorCode.HOSPITAL_EXEMPT, sdx.poa_error_code_flag);
+    // v431: no evaluation ran, so the procedure is never flagged
+    try std.testing.expect(!proc.hac_usage_flag.contains(.HAC_08));
+    // v431: flag output zeroes the HAC number
+    try std.testing.expectEqual(@as(usize, 1), sdx.hacs_flags.items.len);
+    try std.testing.expectEqual(@as(i32, 0), sdx.hacs_flags.items[0].hac_number);
+    try std.testing.expectEqual(models.HacUsage.HAC_NOT_APPLICABLE_EXEMPT, sdx.hacs_flags.items[0].hac_status);
+}
+
+test "MsdrgHacProcessor EXEMPT v440 evaluates then overrides and keeps flag hac number" {
+    const allocator = std.testing.allocator;
+    const desc_filename = "test_hac_desc_ex440.bin";
+    const formula_filename = "test_hac_formula_ex440.bin";
+    try writeHacTestFiles(desc_filename, formula_filename, 8, 400, 440);
+    defer {
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, desc_filename) catch {};
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, formula_filename) catch {};
+    }
+
+    var fixture = try HacTestFixture.init(allocator, desc_filename, formula_filename, 'N', 8);
+    defer fixture.deinit(allocator);
+
+    var processor = MsdrgHacProcessor{
+        .description_data = &fixture.desc_data,
+        .formula_data = &fixture.formula_data,
+        .version = 440,
+    };
+
+    const context = models.ProcessingContext.init(allocator, &fixture.data, .{ .poa_reporting_exempt = .EXEMPT }, &fixture.ast_cache);
+    _ = try MsdrgHacProcessor.execute(&processor, context);
+
+    const sdx = &fixture.data.sdx_codes.items[0];
+    const proc = &fixture.data.procedure_codes.items[0];
+
+    // Statuses are still overridden to exempt after evaluation
+    try std.testing.expectEqual(models.HacUsage.HAC_NOT_APPLICABLE_EXEMPT, sdx.hacs.items[0].hac_status);
+    try std.testing.expectEqual(models.PoaErrorCode.HOSPITAL_EXEMPT, sdx.poa_error_code_flag);
+    // v440: evaluation ran before the override, so the procedure keeps its HAC usage flag
+    try std.testing.expect(proc.hac_usage_flag.contains(.HAC_08));
+    // v440: flag output keeps the real HAC number
+    try std.testing.expectEqual(@as(usize, 1), sdx.hacs_flags.items.len);
+    try std.testing.expectEqual(@as(i32, 8), sdx.hacs_flags.items[0].hac_number);
+    try std.testing.expectEqual(models.HacUsage.HAC_NOT_APPLICABLE_EXEMPT, sdx.hacs_flags.items[0].hac_status);
+}
+
+test "MsdrgHacProcessor v431 flags procedures only when HAC criteria is met" {
+    const allocator = std.testing.allocator;
+    const desc_filename = "test_hac_desc_np431.bin";
+    const formula_filename = "test_hac_formula_np431.bin";
+    try writeHacTestFiles(desc_filename, formula_filename, 8, 400, 431);
+    defer {
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, desc_filename) catch {};
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, formula_filename) catch {};
+    }
+
+    // POA = Y → HAC_CRITERIA_NOT_MET without evaluation
+    var fixture = try HacTestFixture.init(allocator, desc_filename, formula_filename, 'Y', 8);
+    defer fixture.deinit(allocator);
+
+    var processor = MsdrgHacProcessor{
+        .description_data = &fixture.desc_data,
+        .formula_data = &fixture.formula_data,
+        .version = 431,
+    };
+
+    const context = models.ProcessingContext.init(allocator, &fixture.data, .{}, &fixture.ast_cache);
+    _ = try MsdrgHacProcessor.execute(&processor, context);
+
+    const sdx = &fixture.data.sdx_codes.items[0];
+    const proc = &fixture.data.procedure_codes.items[0];
+
+    try std.testing.expectEqual(models.HacUsage.HAC_CRITERIA_NOT_MET, sdx.hacs.items[0].hac_status);
+    // v431: criteria not met → procedure not flagged
+    try std.testing.expect(!proc.hac_usage_flag.contains(.HAC_08));
+    // v431: flag output zeroes the HAC number
+    try std.testing.expectEqual(@as(usize, 1), sdx.hacs_flags.items.len);
+    try std.testing.expectEqual(@as(i32, 0), sdx.hacs_flags.items[0].hac_number);
+}
+
+test "MsdrgHacProcessor v440 flags procedures regardless of HAC criteria status" {
+    const allocator = std.testing.allocator;
+    const desc_filename = "test_hac_desc_np440.bin";
+    const formula_filename = "test_hac_formula_np440.bin";
+    try writeHacTestFiles(desc_filename, formula_filename, 8, 400, 440);
+    defer {
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, desc_filename) catch {};
+        std.Io.Dir.deleteFile(std.Io.Dir.cwd(), std.testing.io, formula_filename) catch {};
+    }
+
+    // POA = Y → HAC_CRITERIA_NOT_MET without evaluation
+    var fixture = try HacTestFixture.init(allocator, desc_filename, formula_filename, 'Y', 8);
+    defer fixture.deinit(allocator);
+
+    var processor = MsdrgHacProcessor{
+        .description_data = &fixture.desc_data,
+        .formula_data = &fixture.formula_data,
+        .version = 440,
+    };
+
+    const context = models.ProcessingContext.init(allocator, &fixture.data, .{}, &fixture.ast_cache);
+    _ = try MsdrgHacProcessor.execute(&processor, context);
+
+    const sdx = &fixture.data.sdx_codes.items[0];
+    const proc = &fixture.data.procedure_codes.items[0];
+
+    try std.testing.expectEqual(models.HacUsage.HAC_CRITERIA_NOT_MET, sdx.hacs.items[0].hac_status);
+    // v440: procedure flagged even though the HAC criteria was not met
+    try std.testing.expect(proc.hac_usage_flag.contains(.HAC_08));
+    // v440: flag output keeps the real HAC number
+    try std.testing.expectEqual(@as(usize, 1), sdx.hacs_flags.items.len);
+    try std.testing.expectEqual(@as(i32, 8), sdx.hacs_flags.items[0].hac_number);
+    try std.testing.expectEqual(models.HacUsage.HAC_CRITERIA_NOT_MET, sdx.hacs_flags.items[0].hac_status);
 }

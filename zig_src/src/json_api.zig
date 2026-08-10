@@ -75,6 +75,7 @@ pub const ProcedureOutput = struct {
     is_or: bool,
     drg_impact: []const u8,
     flags: []const []const u8,
+    hac_usage: []const []const u8 = &.{},
 };
 
 fn parsePoa(poa_str: ?[]const u8) u8 {
@@ -117,7 +118,11 @@ fn mapDiagnosisOutput(arena: std.mem.Allocator, dx: models.DiagnosisCode) !Diagn
     }
 
     var hacs_list: std.ArrayListUnmanaged(HacOutput) = .empty;
-    for (dx.hacs.items) |hac| {
+    // Output the processed HAC flag list (hacs_flags), matching the Java
+    // grouper's MsdrgDiagnosisFlag which wraps MsdrgDiagnosisCode.getHacsFlags().
+    // hacs_flags is built by MsdrgHacProcessor.updateHacListAfterEvaluation and
+    // applies dedup, version-dependent HAC number zeroing, and fallback rules.
+    for (dx.hacs_flags.items) |hac| {
         try hacs_list.append(arena, HacOutput{
             .hac_number = hac.hac_number,
             .hac_list = try arena.dupe(u8, hac.hac_list),
@@ -146,11 +151,20 @@ fn mapProcedureOutput(arena: std.mem.Allocator, proc: models.ProcedureCode) !Pro
         }
     }
 
+    var hac_usage_list: std.ArrayListUnmanaged([]const u8) = .empty;
+    inline for (@typeInfo(models.ProcedureHacUsage).@"enum".field_names) |name| {
+        const usage: models.ProcedureHacUsage = @field(models.ProcedureHacUsage, name);
+        if (proc.hac_usage_flag.contains(usage)) {
+            try hac_usage_list.append(arena, name);
+        }
+    }
+
     return ProcedureOutput{
         .code = try arena.dupe(u8, proc.value.toSlice()),
         .is_or = proc.is_operating_room,
         .drg_impact = @tagName(proc.drg_impact),
         .flags = try flags_list.toOwnedSlice(arena),
+        .hac_usage = try hac_usage_list.toOwnedSlice(arena),
     };
 }
 

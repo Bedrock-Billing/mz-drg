@@ -50,6 +50,12 @@ pub const MsdrgClusters = struct {
 
                 std.log.debug("MsdrgClusters: Processing cluster index {d}", .{c_idx});
                 const cl = try self.cluster_info.getCluster(c_idx);
+
+                // Cluster data can differ between version-range rows for the
+                // same cluster name (e.g. v44 changed suppression MDCs). Only
+                // consider the row whose version range covers this claim.
+                if (!cl.appliesToVersion(self.version)) continue;
+
                 std.log.debug("MsdrgClusters: Got cluster, getting choices...", .{});
                 const choices = cl.getChoices();
                 const choice_count = choices.count;

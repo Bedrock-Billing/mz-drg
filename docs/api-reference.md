@@ -371,10 +371,10 @@ Static methods to convert between MS-DRG version numbers and ICD-10 fiscal years
 
 ```python
 @staticmethod
-def version_to_year(version: int) -> int   # 431 -> 2026
+def version_to_year(version: int) -> int   # 440 -> 2027
 
 @staticmethod
-def year_to_version(year: int) -> int      # 2026 -> 431
+def year_to_version(year: int) -> int      # 2027 -> 440
 ```
 
 #### `close()` / Context manager

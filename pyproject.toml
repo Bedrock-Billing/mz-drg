@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "msdrg"
-version = "1.1.0"
+version = "1.2.0"
 description = "High-performance MS-DRG (Medicare Severity Diagnosis Related Groups) grouper"
 readme = "README.md"
 license = "MIT"
@@ -25,6 +25,7 @@ classifiers = [
 keywords = ["drg", "ms-drg", "grouper", "healthcare", "medicare"]
 dependencies = [
     "lmdb>=2.2.0",
+    "protobuf>=7.35.1",
     "requests>=2.33.1",
 ]
 

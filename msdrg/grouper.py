@@ -25,6 +25,7 @@ _VERSION_TO_YEAR: dict[int, int] = {
     421: 2025,
     430: 2026,
     431: 2026,
+    440: 2027,
 }
 
 
@@ -99,6 +100,7 @@ class ProcedureOutput(TypedDict, total=False):
     is_or: bool
     drg_impact: str
     flags: list[str]
+    hac_usage: list[str]  # HAC usage enum names (e.g. "HAC_08"), v440+ behavior change
 
 
 class AdmitDxGrouperFlag(TypedDict, total=False):
@@ -313,11 +315,12 @@ class MsdrgGrouper:
         - **410/411** — FY 2024 (Oct 2023–Sep 2024)
         - **420/421** — FY 2025 (Oct 2024–Sep 2025)
         - **430/431** — FY 2026 (Oct 2025–Sep 2026)
+        - **440** — FY 2027 (Oct 2026–Mar 2027)
 
         Even versions (400, 410, …) are the base release; odd versions
         (401, 411, …) include mid-year updates.
         """
-        return [400, 401, 410, 411, 420, 421, 430, 431]
+        return [400, 401, 410, 411, 420, 421, 430, 431, 440]
 
     def __enter__(self) -> "MsdrgGrouper":
         return self

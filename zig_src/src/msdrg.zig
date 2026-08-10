@@ -66,6 +66,7 @@ pub const GrouperChain = struct {
     link_v421: ?chain.Link = null,
     link_v430: ?chain.Link = null,
     link_v431: ?chain.Link = null,
+    link_v440: ?chain.Link = null,
 
     pub fn init(allocator: std.mem.Allocator, data_path: []const u8) !GrouperChain {
         // Open consolidated LMDB database
@@ -136,6 +137,7 @@ pub const GrouperChain = struct {
         self.link_v421 = try self.createInternal(421);
         self.link_v430 = try self.createInternal(430);
         self.link_v431 = try self.createInternal(431);
+        self.link_v440 = try self.createInternal(440);
     }
 
     pub fn deinit(self: *GrouperChain) void {
@@ -148,6 +150,7 @@ pub const GrouperChain = struct {
         if (self.link_v421) |*l| l.deinit(self.allocator);
         if (self.link_v430) |*l| l.deinit(self.allocator);
         if (self.link_v431) |*l| l.deinit(self.allocator);
+        if (self.link_v440) |*l| l.deinit(self.allocator);
 
         // Free data sources
         self.cluster_info.deinit();
@@ -181,6 +184,7 @@ pub const GrouperChain = struct {
             410, 411 => 2024,
             420, 421 => 2025,
             430, 431 => 2026,
+            440, 441 => 2027,
             else => 0,
         };
     }
@@ -216,6 +220,7 @@ pub const GrouperChain = struct {
             421 => self.link_v421 orelse error.VersionNotSupported,
             430 => self.link_v430 orelse error.VersionNotSupported,
             431 => self.link_v431 orelse error.VersionNotSupported,
+            440 => self.link_v440 orelse error.VersionNotSupported,
             else => error.VersionNotSupported,
         };
     }

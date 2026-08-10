@@ -18,21 +18,27 @@ def main():
 
     # 1. Load and Index Cluster Information
     print("Indexing Cluster Information...")
-    cursor.execute("SELECT key, value FROM clusterInformation ORDER BY key")
+    cursor.execute(
+        "SELECT key, version_start, version_end, value FROM clusterInformation ORDER BY key, version_start"
+    )
 
-    cluster_map = {}  # Z@ID -> Integer ID
-    cluster_data_list = []  # List of (key, data_dict)
+    # A cluster name can appear in multiple version-range rows whose data
+    # differs (e.g. v44 removed MDC 8 from many clusters' suppressionMdcs).
+    # Keep one binary entry PER ROW (not per name) so each version variant is
+    # preserved, and record every variant's index for the cluster map.
+    cluster_map = {}  # Z@ID -> list of integer IDs (one per version row)
+    cluster_data_list = []  # List of (key, v_start, v_end, data_dict)
 
     # ID 0 is reserved/null
     next_id = 1
 
-    for key, value_json in cursor:
-        cluster_map[key] = next_id
-        cluster_data_list.append((key, json.loads(value_json)))
+    for key, v_start, v_end, value_json in cursor:
+        cluster_map.setdefault(key, []).append(next_id)
+        cluster_data_list.append((key, int(v_start), int(v_end), json.loads(value_json)))
         next_id += 1
 
     num_clusters = len(cluster_data_list)
-    print(f"Indexed {num_clusters} clusters.")
+    print(f"Indexed {num_clusters} cluster rows.")
 
     # 2. Compile Cluster Info (CLIN)
     print("Compiling Cluster Info...")
@@ -52,13 +58,16 @@ def main():
     info_data = bytearray()
     info_offsets = []
 
-    for key, data in cluster_data_list:
+    for key, v_start, v_end, data in cluster_data_list:
         # Record start offset of this cluster's data
         info_offsets.append(len(info_data))
 
         # Name
         n_off, n_len = add_string(key)
         info_data.extend(struct.pack("<II", n_off, n_len))
+
+        # Version range (i32 each) — read-time filter in the Zig engine
+        info_data.extend(struct.pack("<ii", v_start, v_end))
 
         # Suppression MDCs
         supp_mdcs = data.get("suppressionMdcs", [])
@@ -112,11 +121,14 @@ def main():
 
         final_data = bytearray()
 
-        for key, data in cluster_data_list:
+        for key, v_start, v_end, data in cluster_data_list:
             # Name
             n_off, n_len = add_string(key)
             abs_n_off = strings_offset + n_off
             final_data.extend(struct.pack("<II", abs_n_off, n_len))
+
+            # Version range
+            final_data.extend(struct.pack("<ii", v_start, v_end))
 
             supp_mdcs = data.get("suppressionMdcs", [])
             final_data.append(len(supp_mdcs))
@@ -153,13 +165,18 @@ def main():
         cluster_ids = json.loads(value_json)
 
         list_offset = len(list_data)
-        count = len(cluster_ids)
+        count = 0
 
         for c_key in cluster_ids:
-            c_id = cluster_map.get(c_key, 0)
-            if c_id == 0:
+            c_ids = cluster_map.get(c_key, [])
+            if not c_ids:
                 print(f"Warning: Unknown cluster {c_key}")
-            list_data.extend(struct.pack("<H", c_id))  # u16
+            # A cluster name can have multiple version-range rows; include the
+            # index of every variant. The engine filters by version at read
+            # time (each cluster_info entry carries its version range).
+            for c_id in c_ids:
+                list_data.extend(struct.pack("<H", c_id))  # u16
+                count += 1
 
         map_entries.append(
             {
